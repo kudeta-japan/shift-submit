@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>提出一覧</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body{font-family:system-ui, sans-serif;max-width:900px;margin:40px auto;padding:0 16px}
+    table{width:100%;border-collapse:collapse;margin-top:16px}
+    th,td{border:1px solid #e5e7eb;padding:8px;text-align:center}
+    th{background:#f7f7f7}
+    .ctrl{display:flex;gap:8px;flex-wrap:wrap}
+    input,button,select{padding:8px;border:1px solid #ddd;border-radius:8px}
+    button{background:#111827;color:#fff;border:none;font-weight:700;cursor:pointer}
+    a{margin-right:10px}
+  </style>
+</head>
+<body>
+  <h1>提出一覧</h1>
+  <p><a href="./index.html">← 提出へ戻る</a></p>
+
+  <div class="ctrl">
+    <label>月指定
+      <input type="month" id="ym">
+    </label>
+    <button id="load">表示</button>
+  </div>
+
+  <table id="tbl">
+    <tr><td>表示を押してください</td></tr>
+  </table>
+
+  <script>
+    const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const $=id=>document.getElementById(id), tbl=$('tbl');
+
+    $('load').onclick = async () => {
+      const ym = $('ym').value; // 例: 2025-08
+      let from, to;
+      if (ym) {
+        const [y,m] = ym.split('-').map(Number);
+        from = `${y}-${String(m).padStart(2,'0')}-01`;
+        to   = `${y}-${String(m+1).padStart(2,'0')}-01`;
+        if (m===12) { to = `${y+1}-01-01`; }
+      }
+      const q = client.from('shifts').select('*').order('date').order('start_time');
+      const { data, error } = from && to ? await q.gte('date', from).lt('date', to) : await q;
+      if (error) { tbl.innerHTML = `<tr><td>エラー: ${error.message}</td></tr>`; return; }
+      if (!data.length) { tbl.innerHTML = '<tr><td>データなし</td></tr>'; return; }
+
+      let html = '<tr><th>日付</th><th>名前</th><th>開始</th><th>終了</th><th>備考</th></tr>';
+      html += data.map(r => `<tr>
+        <td>${r.date}</td><td>${r.staff_name}</td><td>${r.start_time}</td><td>${r.end_time}</td><td>${r.note||''}</td>
+      </tr>`).join('');
+      tbl.innerHTML = html;
+    };
+  </script>
+</body>
+</html>
