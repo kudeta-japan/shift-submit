@@ -44,11 +44,11 @@
   </table>
 
 <script>
-/* ===== Supabase（差し替え必須） ===== */
-const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+/* ===== Supabase（URLは指定通りに変更済み。鍵は差し替えてください） ===== */
+const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI";
 const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-/* ================================== */
+/* =============================================================== */
 
 const $=id=>document.getElementById(id);
 
@@ -76,8 +76,7 @@ $('loginBtn').onclick=async()=>{
   alert('ログイン用リンクをメールで送信しました。メールをご確認ください。');
 };
 $('logoutBtn').onclick=async()=>{ await supa.auth.signOut(); await ensureAuth(); };
-
-supa.auth.onAuthStateChange((_e,_s)=> ensureAuth());
+supa.auth.onAuthStateChange(()=> ensureAuth());
 
 /* --- 一覧表示 --- */
 $('loadBtn').onclick = async ()=>{
@@ -105,7 +104,7 @@ $('loadBtn').onclick = async ()=>{
   });
 };
 
-/* --- 初期化：当月をセット & 認証チェック --- */
+/* --- 初期化：当月セット & 認証チェック --- */
 (function init(){
   const t=new Date(); const ym=`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}`;
   $('month').value = ym;
