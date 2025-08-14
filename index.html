@@ -3,20 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>KU-DETA シフト提出（Supabase / カレンダー改良版）</title>
+  <title>KU-DETA シフト提出（カレンダー改良＋ドラフト表示）</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root{
       --fg:#111827; --muted:#6b7280; --border:#e5e7eb; --bg:#fafafa; --pri:#111827;
       --ok:#0a8; --err:#d22;
       --cell-bg:#ffffff; --cell-submitted:#e6f7ee; --cell-hover:#f3f4f6; --today-ring:#22c55e;
-      --sun:#e11d48; --sat:#2563eb;
+      --sun:#e11d48; --sat:#2563eb; --draft:#fff7cc; /* 送信予定（ドラフト） */
     }
     *{box-sizing:border-box}
-    body{
-      font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans JP", sans-serif;
-      max-width:1000px;margin:32px auto;padding:0 16px;background:var(--bg);color:var(--fg)
-    }
+    body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans JP",sans-serif;
+         max-width:1000px;margin:32px auto;padding:0 16px;background:var(--bg);color:var(--fg)}
     h1{font-size:1.6rem;margin:0 0 .5rem}
     h2{font-size:1.1rem;margin:20px 0 8px}
     label{display:block;margin:.6rem 0 .2rem;font-weight:600}
@@ -26,8 +24,8 @@
     .row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
     .note{color:var(--muted);font-size:.9rem;margin-top:.35rem}
     .ok{color:var(--ok)} .err{color:var(--err)}
-    fieldset{border:1px solid var(--border);border-radius:12px;margin-top:18px;padding:14px;background:#fff}
-    legend{padding:0 6px;color:var(--muted)}
+    .help{background:#fff8f8;border:1px solid #ffd6d6;color:#b91c1c;border-radius:10px;padding:10px;margin-top:8px}
+
     .nav{margin-top:18px}
     .nav a{display:inline-block;margin-right:12px;text-decoration:none;color:var(--pri);font-weight:700}
 
@@ -37,11 +35,13 @@
     .cal-title{font-weight:800}
     .cal-actions{display:flex;gap:8px}
     .ghost{background:#fff;color:var(--fg);border:1px solid var(--border)}
-    .cal-legend{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:.85rem}
+    .cal-legend{display:flex;gap:12px;align-items:center;color:var(--muted);font-size:.85rem}
+    .chip{display:inline-flex;align-items:center;gap:6px}
     .dot{width:12px;height:12px;border-radius:3px;display:inline-block;border:1px solid var(--border)}
     .lg-submitted{background:var(--cell-submitted)}
     .lg-today{border-color:var(--today-ring)}
     .lg-selected{background:var(--cell-hover)}
+    .lg-draft{background:var(--draft);border-color:#facc15}
 
     .cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
     .dow{font-weight:700;font-size:.9rem;color:#374151;padding:8px 0;text-align:center;background:#f7f7f7;border-bottom:1px solid var(--border)}
@@ -54,13 +54,12 @@
     .cell .top{display:flex;gap:6px;align-items:center}
     .cell .day{font-weight:800;font-size:1rem}
     .cell .wday{font-size:.75rem;color:var(--muted)}
-    .muted{color:#9ca3af}
-    .sun .day{color:var(--sun)} /* 日曜：赤 */
-    .sat .day{color:var(--sat)} /* 土曜：青 */
+    .sun .day{color:var(--sun)} .sat .day{color:var(--sat)}
     .clickable{cursor:pointer}
     .selected{outline:2px solid #111827; outline-offset:-2px; border-radius:6px}
     .today-ring{box-shadow:0 0 0 2px var(--today-ring) inset;border-radius:6px}
     .has-shift{background:var(--cell-submitted)}
+    .draft{background:var(--draft)} /* 送信予定の見た目 */
     .pill{
       position:absolute;bottom:6px;left:6px;right:6px;font-size:.78rem;color:#374151;
       background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:4px 6px;
@@ -75,13 +74,14 @@
 </head>
 <body>
   <h1>KU‑DETA シフト提出</h1>
-  <p class="note">まずは名前を選ぶか、新規登録してください。日曜は左端の 7 列カレンダーで、クリックすると右のフォームに日付が入ります。</p>
+  <p class="note">まずは名前を選ぶか、新規登録してください。日曜が左端の7列カレンダーで、クリックすると右のフォームに日付が入ります。</p>
 
   <!-- 名前選択 + 新規登録 + ロック -->
   <div class="row">
     <div style="flex:1;min-width:260px">
       <label>あなたの名前（登録済み）</label>
       <select id="nameSel"></select>
+      <div id="nameHelp" class="help" style="display:none"></div>
     </div>
     <div class="row" style="gap:6px">
       <div>
@@ -111,16 +111,16 @@
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border)">
           <div class="cal-legend">
-            <span class="dot lg-submitted"></span> 提出済み
-            <span class="dot lg-today"></span> 今日
-            <span class="dot lg-selected"></span> 選択中
+            <span class="chip"><span class="dot lg-submitted"></span>提出済み</span>
+            <span class="chip"><span class="dot lg-draft"></span>送信予定</span>
+            <span class="chip"><span class="dot lg-today"></span>今日</span>
+            <span class="chip"><span class="dot lg-selected"></span>選択中</span>
           </div>
-          <div class="note">クリックで日付を選択／再クリックで右の送信</div>
+          <div class="note">開始/終了を入れると「送信予定」で色づきます</div>
         </div>
         <div class="cal-grid" id="calGrid">
           <div class="dow">日</div><div class="dow">月</div><div class="dow">火</div>
           <div class="dow">水</div><div class="dow">木</div><div class="dow">金</div><div class="dow">土</div>
-          <!-- 日付セルはJSで生成 -->
         </div>
       </div>
     </section>
@@ -169,8 +169,14 @@
 
     // ==== 名前マスタ（staff） ====
     async function loadStaff(selected=null){
+      const help = $('nameHelp'); help.style.display='none'; help.textContent='';
       const { data, error } = await client.from('staff').select('*').eq('include', true).order('name');
-      if(error){ $('nameMsg').innerHTML = '<span class="err">読み込みエラー: '+error.message+'</span>'; return; }
+      if(error){
+        // staff テーブル未作成など：やさしい案内に置き換え
+        help.style.display='block';
+        help.innerHTML = '名前マスタ（staff）が見つかりません。Supabase の SQL Editor で、<b>staff / shifts 作成SQL</b>を実行してください。<br>（この画面下の指示の「① Supabase：テーブル作成 & 最小ポリシー」）';
+        return;
+      }
       const sel = $('nameSel'); sel.innerHTML='';
       (data||[]).forEach(r=>{
         const opt = new Option(r.name, r.name);
@@ -181,7 +187,6 @@
 
       const sv = localStorage.getItem('shiftName');
       if(sv && [...sel.options].some(o=>o.value===sv)){ sel.value=sv; toggleLock(true); }
-      // カレンダーの提出状況更新
       refreshMyMonth();
     }
     $('addBtn').onclick = async ()=>{
@@ -222,8 +227,31 @@
     let calYear, calMonth; // 1-12
     let myMonthMap = new Map(); // day -> [{start_time,end_time,note}, ...]
 
+    // 右フォームの入力（今回送信予定）をプレビュー
+    function updateDraftPreview(){
+      // 1) まずカレンダー再描画で selected/draft 判定を最新に
+      rebuildCalendar();
+      // 2) 選択セルにドラフトピルを描画
+      const date = $('date').value;
+      const st = $('start').value, en = $('end').value;
+      if(!date || !st || !en) return;
+      const {d} = parseYMD(date);
+      const grid = $('calGrid');
+      const cells = grid.querySelectorAll('.cell.clickable'); // 当月のみ
+      const target = cells[d-1];
+      if(target){
+        target.classList.add('draft');
+        // 既存ピルを一旦削除（再生成）
+        const old = target.querySelector('.pill.draft');
+        if(old) old.remove();
+        const pill = document.createElement('div');
+        pill.className = 'pill draft';
+        pill.textContent = `予定 ${st.slice(0,5)}–${en.slice(0,5)}`;
+        target.appendChild(pill);
+      }
+    }
+
     async function refreshMyMonth(){
-      // 選択中の月×選択中の名前で、その月の提出を取得
       const name = $('nameSel').value;
       if(!name){ myMonthMap = new Map(); rebuildCalendar(); return; }
       const from = fmtYMD(calYear, calMonth, 1);
@@ -250,24 +278,22 @@
 
     function rebuildCalendar(){
       const grid = $('calGrid');
-      // 曜日ヘッダ7個を残してクリア
       while(grid.children.length > 7) grid.removeChild(grid.lastChild);
 
       const first = new Date(calYear, calMonth-1, 1);
       const last  = new Date(calYear, calMonth, 0);
       const days  = last.getDate();
-      const startDow = first.getDay(); // 0=日
+      const startDow = first.getDay();
       const today = new Date(); today.setHours(0,0,0,0);
       $('calTitle').textContent = `${calYear}年 ${calMonth}月`;
 
-      // 前の空白
       for(let i=0;i<startDow;i++){
         const div = document.createElement('div');
         div.className = 'cell muted';
         grid.appendChild(div);
       }
 
-      const selected = $('date').value; // yyyy-mm-dd
+      const selected = $('date').value;
       for(let d=1; d<=days; d++){
         const dow = new Date(calYear, calMonth-1, d).getDay();
         const div = document.createElement('div');
@@ -276,11 +302,9 @@
         let cls = 'cell clickable';
         if(dow===0) cls+=' sun'; else if(dow===6) cls+=' sat';
         if(selected === ymd) cls+=' selected';
-
         const isToday = (today.getFullYear()===calYear && (today.getMonth()+1)===calMonth && today.getDate()===d);
         if(isToday) cls+=' today-ring';
 
-        // 提出済み（この名前で当月）
         const mine = myMonthMap.get(d) || [];
         if(mine.length) cls+=' has-shift';
 
@@ -293,7 +317,6 @@
         `;
 
         if(mine.length){
-          // 1件目の時間を表示、他は +n 件
           const first = mine[0];
           const label = `${first.start_time?.slice(0,5) || '--:--'}–${first.end_time?.slice(0,5) || '--:--'}${mine.length>1 ? '　+'+(mine.length-1)+'件' : ''}`;
           const pill = document.createElement('div');
@@ -302,7 +325,6 @@
           div.appendChild(pill);
         }
 
-        // クリックで日付セット & 連続クリックで送信欄へフォーカス
         div.addEventListener('click', ()=>{
           const wasSelected = ($('date').value === ymd);
           $('date').value = ymd;
@@ -313,7 +335,6 @@
         grid.appendChild(div);
       }
 
-      // 後ろの空白
       const rem = grid.children.length % 7;
       if(rem !== 0){
         for(let i=0;i<7-rem;i++){
@@ -322,6 +343,9 @@
           grid.appendChild(div);
         }
       }
+
+      // 選択セルにドラフト表示を反映
+      updateDraftPreview();
     }
 
     function initCalendarFromToday(){
@@ -335,46 +359,34 @@
     $('nextMonth').onclick = ()=>{ calMonth++; if(calMonth===13){ calMonth=1; calYear++; } refreshMyMonth(); };
     $('thisMonth').onclick = ()=>{ const t=new Date(); calYear=t.getFullYear(); calMonth=t.getMonth()+1; refreshMyMonth(); };
 
-    $('date').addEventListener('change', ()=>{
-      const {y,m} = parseYMD($('date').value);
-      if(y && m){ calYear=y; calMonth=m; rebuildCalendar(); }
-    });
+    // 入力変化でドラフト色＆ピルを更新
+    $('date').addEventListener('change', ()=>{ const {y,m}=parseYMD($('date').value); if(y&&m){ calYear=y; calMonth=m; } updateDraftPreview(); });
+    $('start').addEventListener('input', updateDraftPreview);
+    $('end').addEventListener('input', updateDraftPreview);
 
     // ==== 送信 ====
     $('shiftForm').addEventListener('submit', async (e)=>{
       e.preventDefault();
       const staff_name = $('nameSel').value;
       if(!staff_name){ alert('先に名前を選ぶか登録してください'); return; }
+
+      const date = $('date').value, st=$('start').value, en=$('end').value;
+      if(!date || !st || !en){ alert('日付・開始・終了を入力してください'); return; }
       $('msg').textContent='送信中…';
 
-      const row = {
-        staff_name,
-        date: $('date').value,
-        start_time: $('start').value,
-        end_time: $('end').value,
-        note: $('note').value.trim() || null
-      };
+      const row = { staff_name, date, start_time: st, end_time: en, note: $('note').value.trim() || null };
       const { error } = await client.from('shifts').insert(row);
       if(error){ $('msg').innerHTML = '<span class="err">Error: '+error.message+'</span>'; return; }
 
       $('msg').innerHTML = '<span class="ok">送信しました ✔︎</span>';
-      // 送信直後にセルをフラッシュさせる
-      const {y,m,d} = parseYMD(row.date);
-      // ローカルの月データを更新（再取得でもOKだが体感を軽く）
-      const arr = myMonthMap.get(d) || [];
-      arr.unshift({start_time:row.start_time, end_time:row.end_time, note:row.note});
-      myMonthMap.set(d, arr);
+      // 月内キャッシュを更新→提出表示＆フラッシュ
+      const {d} = parseYMD(date);
+      const arr = myMonthMap.get(d) || []; arr.unshift({start_time:st, end_time:en, note:row.note}); myMonthMap.set(d, arr);
       rebuildCalendar();
-      // flash
-      const grid = $('calGrid');
-      // 曜日ヘッダ7個 + 前方空白 + (d) 番目セルの位置を算出するのは面倒なので、再描画後に querySelector で拾う
-      const cellList = grid.querySelectorAll('.cell.clickable');
-      // 前方空白は :not(.clickable) なので、当月セルは順に並ぶ → (d-1) 番目が該当
-      const target = cellList[d-1];
+      const grid = $('calGrid'); const cellList = grid.querySelectorAll('.cell.clickable'); const target = cellList[d-1];
       if(target){ target.classList.add('flash'); setTimeout(()=>target.classList.remove('flash'), 1000); }
 
-      e.target.reset();
-      $('date').value = fmtYMD(calYear, calMonth, d); // 選択維持
+      e.target.reset(); $('date').value = date; updateDraftPreview(); // 選択維持＆ドラフト消去
       loadList();
     });
 
@@ -394,11 +406,13 @@
     }
 
     // ==== 初期ロード ====
-    loadStaff().then(()=>{
+    (async ()=>{
+      await loadStaff();
+      const t=new Date(); calYear=t.getFullYear(); calMonth=t.getMonth()+1;
       initCalendarFromToday();
       refreshMyMonth();
       loadList();
-    });
+    })();
   </script>
 </body>
 </html>
