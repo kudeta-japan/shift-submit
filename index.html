@@ -16,7 +16,6 @@
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;max-width:1000px;margin:26px auto;padding:0 14px;background:var(--bg);color:var(--fg)}
   h1{font-size:1.6rem;margin:0 0 .25rem}
   .note{color:var(--muted);font-size:.9rem}
-  .ok{color:var(--ok)} .warn{color:var(--warn)}
   input,select,button,textarea{padding:10px;border:1px solid var(--border);border-radius:10px;font-size:16px;background:#fff}
   button{background:var(--pri);color:#fff;font-weight:700;border:none;cursor:pointer}
   button.ghost{background:#fff;color:var(--fg);border:1px solid var(--border)}
@@ -61,21 +60,10 @@
   @media (max-width:820px){
     .grid2{grid-template-columns:1fr}
   }
-
-  /* 認証UI */
-  .auth{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .auth small{color:var(--muted)}
 </style>
 </head>
 <body>
   <h1>KU‑DETA シフト提出</h1>
-  <div class="auth">
-    <small>ログイン状態：</small>
-    <span id="who">未ログイン</span>
-    <input id="email" placeholder="メールアドレス" style="max-width:240px">
-    <button class="ghost" id="loginBtn">ログインリンク送信</button>
-    <button class="ghost" id="logoutBtn" style="display:none">ログアウト</button>
-  </div>
   <p class="note">半月ごとに提出。締切は <b>15日</b>/<b>月末</b>、猶予<b>3日</b>（猶予中は管理者のみ編集可）。時間指定なしは<b>◯</b>で表します。</p>
 
   <!-- 上段：名前 / 期間 / ロック -->
@@ -170,51 +158,21 @@
     <ul id="list" class="note" style="margin:6px 0 0 1em"><li>読み込み中…</li></ul>
   </section>
 
-  <!-- ▼ 一番下に「提出一覧を見る」ボタン -->
+  <!-- ▼ 下部：提出一覧へ -->
   <div class="row" style="justify-content:flex-end;margin-top:10px">
     <button class="ghost" id="toListBtn">提出一覧を見る</button>
   </div>
 
 <script>
-/* ===== Supabase（差し替え必須） ===== */
-const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI
-";
+/* ===== Supabase（URLは指定通りに変更済み。鍵は差し替えてください） ===== */
+const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI";
 const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-/* ================================== */
+/* =============================================================== */
 
 const $=id=>document.getElementById(id);
 
-/* ---- 認証UI ---- */
-async function refreshAuthUI(){
-  const { data:{ session } } = await supa.auth.getSession();
-  if(session?.user){
-    $('who').textContent = session.user.email || '(ログイン中)';
-    $('email').style.display='none';
-    $('loginBtn').style.display='none';
-    $('logoutBtn').style.display='';
-  }else{
-    $('who').textContent = '未ログイン';
-    $('email').style.display='';
-    $('loginBtn').style.display='';
-    $('logoutBtn').style.display='none';
-  }
-}
-$('loginBtn').onclick = async()=>{
-  const email = $('email').value.trim();
-  if(!email) return alert('メールアドレスを入力してください');
-  const { error } = await supa.auth.signInWithOtp({ email });
-  if(error) return alert(error.message);
-  alert('ログイン用リンクをメールで送信しました。メールを確認してください。');
-};
-$('logoutBtn').onclick = async()=>{
-  await supa.auth.signOut();
-  await refreshAuthUI();
-};
-supa.auth.onAuthStateChange((_event, _session)=> refreshAuthUI());
-refreshAuthUI();
-
-/* ========= 期間ユーティリティ ========= */
+/* ========= 期間/日付ユーティリティ ========= */
 function fmtYMD(y,m,d){ return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
 function labelHalf(y,m,h){ return `${y}年${m}月 ${h==='前半'?'1-15日':'16-月末'}`; }
 function deadlineOf(y,m,h){ return (h==='前半') ? new Date(y, m-2, 15) : new Date(y, m-1, 0); }
@@ -226,18 +184,20 @@ function nextTwoPeriods(now=new Date()){
   const arr=[]; for(let i=0;i<2;){ adv(); const dl=deadlineOf(y,m,h); if(dl>=now){arr.push({y,m,h,dl,gr:graceUntil(dl)}); i++;} }
   return arr;
 }
+function monthEnd(y,m){ return new Date(y,m,0).getDate(); }
 
-/* ========= 時刻（30分刻み） ========= */
+/* ========= 30分刻み ========= */
 function timesBetween(a,b){ const out=[]; let[h,m]=a.split(':').map(Number); const[eh,em]=b.split(':').map(Number);
   while(h<eh || (h===eh && m<=em)){ out.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`); m+=30; if(m===60){m=0;h++;} }
   return out;
 }
 const SLOT={ LUNCH:{label:'ランチ',start:'10:00',end:'16:00'}, DINNER:{label:'ディナー',start:'17:00',end:'24:00'} };
-function fillTimes(startSel,endSel,slot){
-  const xs=timesBetween(SLOT[slot].start,SLOT[slot].end);
-  startSel.innerHTML=''; endSel.innerHTML='';
-  xs.forEach(t=>startSel.add(new Option(t,t))); xs.forEach(t=>endSel.add(new Option(t,t)));
-  startSel.value=SLOT[slot].start; endSel.value=SLOT[slot].end;
+function populateTimeOptions(sel, startHour, endHour) {
+  sel.innerHTML = "";
+  for (let h = startHour; h <= endHour; h++) for (let m of [0, 30]) {
+    const t = `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+    const opt = document.createElement("option"); opt.value=t; opt.textContent=t; sel.appendChild(opt);
+  }
 }
 function setDisabled(elStart,elEnd,on){ elStart.disabled=on; elEnd.disabled=on; }
 
@@ -306,7 +266,6 @@ $('periodSel').onchange=applyPeriodState;
 
 /* ========= カレンダー ========= */
 const WDAY=['日','月','火','水','木','金','土'];
-function monthEnd(){return new Date(calYear,calMonth,0).getDate();}
 function rebuildCalendar(){
   const grid=$('calGrid'); while(grid.children.length>7) grid.removeChild(grid.lastChild);
   $('calTitle').textContent=`${calYear}年 ${calMonth}月`;
@@ -360,15 +319,13 @@ function drawDraftChip(){
   if(!cell) return;
   Array.from(cell.querySelectorAll('.chip.draft')).forEach(n=>n.remove());
 
-  const useL = $('Lenable').checked;
-  const useD = $('Denable').checked;
-  const lAny=$('Lany').checked, dAny=$('Dany').checked;
-
-  if(useL){
+  if($('Lenable').checked){
+    const lAny=$('Lany').checked;
     const L = lAny || $('Lstart').value && $('Lend').value ? {any:lAny,start:$('Lstart').value,end:$('Lend').value} : null;
     if(L){ const c=document.createElement('div'); c.className='chip draft'; c.textContent=`ランチ：${L.any?'◯':`${L.start}–${L.end}`}`; cell.appendChild(c); }
   }
-  if(useD){
+  if($('Denable').checked){
+    const dAny=$('Dany').checked;
     const D = dAny || $('Dstart').value && $('Dend').value ? {any:dAny,start:$('Dstart').value,end:$('Dend').value} : null;
     if(D){ const c=document.createElement('div'); c.className='chip draft'; c.textContent=`ディナー：${D.any?'◯':`${D.start}–${D.end}`}`; cell.appendChild(c); }
   }
@@ -376,7 +333,7 @@ function drawDraftChip(){
 
 async function refreshMyMonth(){
   if(!currentUser?.name){myMonthMap=new Map(); rebuildCalendar(); return;}
-  const from=fmtYMD(calYear,calMonth,1), to=fmtYMD(calYear,calMonth,monthEnd());
+  const from=fmtYMD(calYear,calMonth,1), to=fmtYMD(calYear,calMonth,monthEnd(calYear,calMonth));
   const {data}=await supa.from('shifts').select('date,start_time,end_time,note').eq('staff_name',currentUser.name).gte('date',from).lte('date',to);
   myMonthMap=new Map();
   (data||[]).forEach(r=>{ const d=Number(r.date.slice(-2)); const arr=myMonthMap.get(d)||[]; arr.push(r); myMonthMap.set(d,arr); });
@@ -395,20 +352,17 @@ $('Denable').onchange = ()=>{ setBlockEnabled('dinnerBlock','Denable','Dany','Ds
 $('Lany').onchange = ()=>{ setDisabled($('Lstart'), $('Lend'), $('Lany').checked || !$('Lenable').checked); drawDraftChip(); };
 $('Dany').onchange = ()=>{ setDisabled($('Dstart'), $('Dend'), $('Dany').checked || !$('Denable').checked); drawDraftChip(); };
 
-/* ========= 送信 ========= */
+/* ========= 送信（認証不要） ========= */
 $('submitBtn').onclick=async()=>{
-  // 認証必須（未ログインは弾く）
-  const { data:{session} } = await supa.auth.getSession();
-  if(!session?.user){ $('msg').innerHTML='<span class="warn">まずログインしてください</span>'; return; }
-
   const p=curPeriod(), now=new Date(); now.setHours(0,0,0,0);
   const canEdit=(now<=p.dl) || (now>p.dl && now<=p.gr && currentUser?.is_admin);
   if(!canEdit){ $('msg').innerHTML='<span class="warn">この期間は現在編集できません</span>'; return; }
 
   const date=$('date').value;
   if(!date){ $('msg').textContent='日付を選択してください'; return; }
+  if(!currentUser?.name || currentUser.name==='（未設定）'){ $('msg').textContent='名前を選択してください'; return; }
 
-  // まずその日の自分の提出を全削除（空欄反映）
+  // その日の自分の提出を一旦削除（空欄反映）
   const del = await supa.from('shifts').delete().eq('staff_name', currentUser.name).eq('date', date);
   if(del.error){ $('msg').textContent='Error: '+del.error.message; return; }
 
@@ -439,14 +393,6 @@ $('submitBtn').onclick=async()=>{
   const ins = await supa.from('shifts').insert(rows);
   if(ins.error){ $('msg').textContent='Error: '+ins.error.message; return; }
   $('msg').innerHTML='<span class="ok">送信しました ✔︎</span>';
-
-  // 条件付きの楽観更新（同月のみ）
-  const sub=new Date(rows[0].date); const subY=sub.getFullYear(); const subM=sub.getMonth()+1;
-  if(subY===calYear && subM===calMonth){
-    const d=Number(rows[0].date.slice(-2));
-    myMonthMap.set(d,(myMonthMap.get(d)||[]).concat(rows.map(r=>({start_time:r.start_time,end_time:r.end_time,note:r.note}))));
-    rebuildCalendar();
-  }
   await refreshMyMonth(); loadList();
 };
 
@@ -462,18 +408,6 @@ async function loadList(){
 }
 
 /* ========= init ========= */
-function populateTimeOptions(sel, startHour, endHour) {
-  sel.innerHTML = "";
-  for (let h = startHour; h <= endHour; h++) {
-    for (let m of [0, 30]) {
-      const hh = String(h).padStart(2, "0");
-      const mm = String(m).padStart(2, "0");
-      const t = `${hh}:${mm}`;
-      const opt = document.createElement("option");
-      opt.value = t; opt.textContent = t; sel.appendChild(opt);
-    }
-  }
-}
 (function init(){
   const t=new Date(); calYear=t.getFullYear(); calMonth=t.getMonth()+1;
   $('date').value=fmtYMD(t.getFullYear(), t.getMonth()+1, t.getDate());
@@ -492,7 +426,7 @@ function populateTimeOptions(sel, startHour, endHour) {
   $('nextMonth').onclick=()=>{calMonth++; if(calMonth===13){calMonth=1;calYear++;} rebuildCalendar();};
   $('thisMonth').onclick=()=>{const t=new Date(); calYear=t.getFullYear(); calMonth=t.getMonth()+1; rebuildCalendar();};
 
-  // 下部ボタン：shiftlink.html へ
+  // 一覧へ
   $('toListBtn').onclick = ()=> { window.location.href = 'shiftlink.html'; };
 })();
 </script>
