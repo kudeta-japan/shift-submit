@@ -1,62 +1,86 @@
-<!DOCTYPE html>
-<html lang="ja">
+<!DOCTYPE html><html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>提出一覧</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>
-    body{font-family:system-ui, sans-serif;max-width:900px;margin:40px auto;padding:0 16px}
-    table{width:100%;border-collapse:collapse;margin-top:16px}
-    th,td{border:1px solid #e5e7eb;padding:8px;text-align:center}
-    th{background:#f7f7f7}
-    .ctrl{display:flex;gap:8px;flex-wrap:wrap}
-    input,button,select{padding:8px;border:1px solid #ddd;border-radius:8px}
-    button{background:#111827;color:#fff;border:none;font-weight:700;cursor:pointer}
-    a{margin-right:10px}
-  </style>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>提出されたシフト一覧（Supabase版）</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+body{font-family:system-ui,sans-serif;padding:24px;max-width:1100px;margin:auto;background:#fafafa}
+h2{font-size:1.4rem;margin-bottom:16px}
+a.btn{display:inline-block;text-decoration:none;border-radius:10px;padding:10px 18px;margin-right:8px;font-weight:600}
+a.index{background:#fff;color:#111827;border:1px solid #e5e7eb}
+table{width:100%;border-collapse:collapse;margin-top:12px;background:#fff}
+th,td{border:1px solid #e5e7eb;padding:6px;text-align:center}
+th{background:#f7f7f7}
+#status{margin-top:8px;color:#666}
+.controls{margin-top:10px}
+select,button{padding:8px 12px;border:1px solid #e5e7eb;border-radius:10px}
+button{background:#111827;color:#fff;font-weight:600}
+</style>
 </head>
 <body>
-  <h1>提出一覧</h1>
-  <p><a href="./index.html">← 提出へ戻る</a></p>
+<h2>提出されたシフト一覧</h2>
+<p><a class="btn index" href="./index.html">← 提出画面へ戻る</a></p>
 
-  <div class="ctrl">
-    <label>月指定
-      <input type="month" id="ym">
-    </label>
-    <button id="load">表示</button>
-  </div>
+<div class="controls">
+  <label>表示する期間：
+    <select id="year"></select>
+    <select id="month"></select>
+    <select id="half"><option value="前半">前半（1〜15日）</option><option value="後半">後半（16〜月末）</option></select>
+    <button id="loadBtn">表示</button>
+  </label>
+</div>
 
-  <table id="tbl">
-    <tr><td>表示を押してください</td></tr>
-  </table>
+<div id="status">読み込み待ち…</div>
+<table id="shiftTable"><tr><td>期間を選んで「表示」を押してください</td></tr></table>
 
-  <script>
-    const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI";
-    const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    const $=id=>document.getElementById(id), tbl=$('tbl');
+<script>
+const SUPABASE_URL="https://wnttziqspjkrinymnodz.supabase.co";
+const SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI";
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $=id=>document.getElementById(id), status=$('status'), tbl=$('shiftTable');
 
-    $('load').onclick = async () => {
-      const ym = $('ym').value; // 例: 2025-08
-      let from, to;
-      if (ym) {
-        const [y,m] = ym.split('-').map(Number);
-        from = `${y}-${String(m).padStart(2,'0')}-01`;
-        to   = `${y}-${String(m+1).padStart(2,'0')}-01`;
-        if (m===12) { to = `${y+1}-01-01`; }
-      }
-      const q = client.from('shifts').select('*').order('date').order('start_time');
-      const { data, error } = from && to ? await q.gte('date', from).lt('date', to) : await q;
-      if (error) { tbl.innerHTML = `<tr><td>エラー: ${error.message}</td></tr>`; return; }
-      if (!data.length) { tbl.innerHTML = '<tr><td>データなし</td></tr>'; return; }
+(function initYM(){
+  const now=new Date();
+  for(let y=now.getFullYear()-1;y<=now.getFullYear()+1;y++){
+    const o=document.createElement('option');o.value=y;o.textContent=`${y}年`; if(y===now.getFullYear())o.selected=true; $('year').appendChild(o);
+  }
+  for(let m=1;m<=12;m++){
+    const o=document.createElement('option');o.value=m;o.textContent=`${m}月`; if(m===now.getMonth()+1)o.selected=true; $('month').appendChild(o);
+  }
+})();
+$('loadBtn').onclick=loadShift;
 
-      let html = '<tr><th>日付</th><th>名前</th><th>開始</th><th>終了</th><th>備考</th></tr>';
-      html += data.map(r => `<tr>
-        <td>${r.date}</td><td>${r.staff_name}</td><td>${r.start_time}</td><td>${r.end_time}</td><td>${r.note||''}</td>
-      </tr>`).join('');
-      tbl.innerHTML = html;
-    };
-  </script>
-</body>
-</html>
+async function loadShift(){
+  const y=+$('year').value, m=+$('month').value, h=$('half').value;
+  status.textContent='読み込み中…'; tbl.innerHTML='<tr><td>読み込み中…</td></tr>';
+
+  const { data: p } = await client.from('periods').select().eq('year',y).eq('month',m).eq('half',h).maybeSingle();
+  if(!p){ status.textContent='該当期間のデータがありません'; tbl.innerHTML='<tr><td>データなし</td></tr>'; return; }
+
+  const { data: rows, error } = await client.from('shifts')
+    .select('day,value,type,staff:staff_id(name)')
+    .eq('period_id',p.id).order('type').order('staff_id').order('day');
+  if(error){ status.textContent='エラー: '+error.message; return; }
+
+  const map = new Map();  // key: "name__type" → {name,type,days[15]}
+  rows.forEach(r=>{
+    const key = `${r.staff.name}__${r.type}`;
+    if(!map.has(key)) map.set(key,{name:r.staff.name,type:r.type,days:Array(15).fill('')});
+    const idx = (h==='前半') ? r.day-1 : r.day-16;
+    if(0<=idx && idx<15) map.get(key).days[idx]=r.value||'';
+  });
+
+  if(map.size===0){ status.textContent='提出0件'; tbl.innerHTML='<tr><td>データなし</td></tr>'; return; }
+
+  status.textContent=`取得件数：${map.size} 行`;
+  let html='<tr><th>名前</th><th>区分</th>';
+  for(let d=1; d<=15; d++) html+=`<th>${d}</th>`; html+='</tr>';
+  for(const v of map.values()){
+    html+=`<tr><td>${v.name}</td><td>${v.type==='LUNCH'?'ランチ':'ディナー'}</td>`+
+          v.days.map(x=>`<td>${x||''}</td>`).join('') + '</tr>';
+  }
+  tbl.innerHTML=html;
+}
+loadShift();
+</script>
+</body></html>
