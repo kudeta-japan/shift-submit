@@ -3,15 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>KU-DETA シフト提出（半月運用＋猶予3日＋通知）</title>
+  <title>KU‑DETA シフト提出</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root{
       --fg:#111827; --muted:#6b7280; --border:#e5e7eb; --bg:#fafafa; --pri:#111827;
       --ok:#0a8; --err:#d22; --warn:#92400e;
       --cell-bg:#ffffff; --cell-submitted:#e6f7ee; --cell-hover:#f3f4f6; --today-ring:#22c55e;
-      --sun:#e11d48; --sat:#2563eb; --draft:#fff7cc;
-      --chip:#f3f4f6;
+      --sun:#e11d48; --sat:#2563eb; --draft:#fff7cc; --chip:#f3f4f6;
     }
     *{box-sizing:border-box}
     body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;max-width:1000px;margin:32px auto;padding:0 16px;background:var(--bg);color:var(--fg)}
@@ -24,13 +23,8 @@
     .row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
     .note{color:var(--muted);font-size:.9rem;margin-top:.35rem}
     .ok{color:var(--ok)} .err{color:var(--err)} .warn{color:var(--warn)}
-    .chip{display:inline-flex;align-items:center;gap:8px;background:var(--chip);border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:.88rem}
-    .chips{display:flex;gap:8px;flex-wrap:wrap}
-
-    .period-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px}
-    .period-badge{font-weight:800}
     .badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;border:1px solid var(--border);background:#fff}
-
+    .period-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px}
     .two-col{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}
     @media (max-width:900px){ .two-col{grid-template-columns:1fr} }
 
@@ -40,7 +34,7 @@
     .cal-title{font-weight:800}
     .cal-actions{display:flex;gap:8px}
     .ghost{background:#fff;color:var(--fg);border:1px solid var(--border)}
-    .legend{display:flex;gap:12px;align-items:center;color:var(--muted);font-size:.85rem}
+    .legend{display:flex;gap:12px;align-items:center;color:#6b7280;font-size:.85rem}
     .dot{width:12px;height:12px;border-radius:3px;display:inline-block;border:1px solid var(--border)}
     .lg-submitted{background:var(--cell-submitted)}
     .lg-draft{background:var(--draft);border-color:#facc15}
@@ -53,8 +47,8 @@
     .cell:hover{background:var(--cell-hover)} .cell:last-child{border-right:0}
     .cell .top{display:flex;gap:6px;align-items:center}
     .cell .day{font-weight:800;font-size:1rem}
-    .cell .wday{font-size:.75rem;color:var(--muted)}
-    .sun .day{color:var(--sun)} .sat .day{color:var(--sat)}
+    .cell .wday{font-size:.75rem;color:#6b7280}
+    .sun .day{color:#e11d48} .sat .day{color:#2563eb}
     .clickable{cursor:pointer} .muted{color:#9ca3af}
     .selected{outline:2px solid #111827; outline-offset:-2px; border-radius:6px}
     .today-ring{box-shadow:0 0 0 2px var(--today-ring) inset;border-radius:6px}
@@ -89,7 +83,7 @@
     </div>
   </div>
 
-  <!-- 期間セレクタ（今後2期間） + 状態 -->
+  <!-- 期間（常に今後2期間） -->
   <div class="period-bar">
     <label>期間</label>
     <select id="periodSel"></select>
@@ -118,7 +112,7 @@
             <span><span class="dot lg-today"></span> 今日</span>
             <span><span class="dot lg-selected"></span> 選択中</span>
           </div>
-          <div class="note">右の時間を入れると「送信予定」に色づきます</div>
+          <div class="note">右の時間指定を入れると「送信予定」に色づきます。<b>◯</b>は時間指定なし。</div>
         </div>
         <div class="cal-grid" id="calGrid">
           <div class="dow">日</div><div class="dow">月</div><div class="dow">火</div>
@@ -127,23 +121,33 @@
       </div>
     </section>
 
-    <!-- 右：入力フォーム -->
+    <!-- 右：入力フォーム（30分刻み / ランチ or ディナー / ◯対応） -->
     <section>
       <h2>この日のシフトを登録</h2>
       <form id="shiftForm">
         <label>日付（カレンダーから選択可）</label>
         <input type="date" id="date" required />
 
+        <label>区分</label>
         <div class="row">
+          <label><input type="radio" name="slot" value="LUNCH" checked> ランチ（10:00–16:00）</label>
+          <label><input type="radio" name="slot" value="DINNER"> ディナー（17:00–24:00）</label>
+        </div>
+
+        <div class="row" id="timeRow">
           <div style="flex:1;min-width:160px">
-            <label>開始</label>
-            <input type="time" id="start" required />
+            <label>開始（30分刻み）</label>
+            <select id="startSel"></select>
           </div>
           <div style="flex:1;min-width:160px">
-            <label>終了</label>
-            <input type="time" id="end" required />
+            <label>終了（30分刻み）</label>
+            <select id="endSel"></select>
           </div>
         </div>
+
+        <label style="display:flex;gap:8px;align-items:center;margin-top:8px">
+          <input type="checkbox" id="anytimeChk"> 時間指定なし（<b>◯</b>）
+        </label>
 
         <label>備考（任意）</label>
         <textarea id="note" rows="2" placeholder="遅刻・早退・希望など"></textarea>
@@ -166,29 +170,45 @@
     const $ = id => document.getElementById(id);
 
     // ===== 半月期間ユーティリティ =====
-    function monthEnd(y,m){ return new Date(y, m, 0).getDate(); } // m=1..12
     function fmtYMD(y,m,d){ return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
     function labelHalf(y,m,h){ return `${y}年${m}月 ${h==='前半'?'1-15日':'16-月末'}`; }
-    function calcDeadline(y,m,h){
-      // 提出対象：y年m月h のシフト → 締切は (h=前半→m-1の15日 / h=後半→m-1の月末)
-      if(h==='前半'){ return new Date(y, m-2, 15); }           // m-1 月の15日（JS月は0始まり）
-      else           { return new Date(y, m-1, 0); }           // m-1 月の月末
-    }
+    function calcDeadline(y,m,h){ return (h==='前半') ? new Date(y, m-2, 15) : new Date(y, m-1, 0); }
     function graceUntil(deadline){ const g=new Date(deadline); g.setDate(g.getDate()+3); return g; }
-    function isAdminFlag(staffRow){ return !!(staffRow && staffRow.is_admin); }
 
-    // ===== 期間セレクタ（今後2期間） =====
+    // ===== 期間（今後2期間） =====
     function nextTwoPeriods(now=new Date()){
       now.setHours(0,0,0,0);
-      let y=now.getFullYear(), m=now.getMonth()+1, h=(now.getDate()<=15?'後半':'前半'); // 次の半期を起点
+      let y=now.getFullYear(), m=now.getMonth()+1, h=(now.getDate()<=15?'後半':'前半');
       const adv=()=>{ if(h==='前半'){ h='後半'; } else { h='前半'; m++; if(m===13){ m=1; y++; } } };
       const arr=[];
       for(let i=0;i<2;){ adv(); const dl=calcDeadline(y,m,h); if(dl>=now){ arr.push({y,m,h,dl,grace:graceUntil(dl)}); i++; } }
       return arr;
     }
 
+    // ===== 時刻生成（30分刻み） =====
+    function timesBetween(start, end){
+      const out=[]; let [h,m]=start.split(':').map(Number); const [eh,em]=end.split(':').map(Number);
+      while(h<eh || (h===eh && m<=em)){ out.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`); m+=30; if(m===60){m=0; h++;} }
+      return out;
+    }
+    const SLOT = {
+      LUNCH:  {label:'ランチ',  start:'10:00', end:'16:00'},
+      DINNER: {label:'ディナー',start:'17:00', end:'24:00'}
+    };
+    function buildTimeSelects(slot){
+      const s=$('startSel'), e=$('endSel'); s.innerHTML=''; e.innerHTML='';
+      const list = timesBetween(SLOT[slot].start, SLOT[slot].end);
+      list.forEach(t=> s.add(new Option(t, t)));
+      list.forEach(t=> e.add(new Option(t, t)));
+      s.value = SLOT[slot].start; e.value = SLOT[slot].end;
+    }
+    function uiAnytime(on){
+      $('startSel').disabled = on; $('endSel').disabled = on;
+      document.getElementById('timeRow').style.opacity = on ? .5 : 1;
+    }
+
     // ===== 名前ロード & 登録 =====
-    let currentUser = null; // {name,is_admin}
+    let currentUser = null;
     async function loadStaff(selected=null){
       const { data, error } = await client.from('staff').select('*').eq('include', true).order('name');
       const sel = $('nameSel'); sel.innerHTML='';
@@ -206,8 +226,7 @@
       const { data } = await client.from('staff').select('name,is_admin').eq('name', nm).maybeSingle();
       currentUser = data || { name:nm, is_admin:false };
       localStorage.setItem('shiftName', currentUser.name);
-      applyPeriodState(); // 管理者なら猶予中も編集可 など
-      refreshMyMonth();
+      applyPeriodState(); refreshMyMonth();
     }
     $('nameSel').onchange = updateCurrentUser;
     $('addBtn').onclick = async ()=>{
@@ -217,15 +236,14 @@
       $('nameMsg').innerHTML='<span class="ok">登録しました</span>'; $('newName').value='';
       await loadStaff(nm);
     };
-    function toggleLock(force){
-      const sel=$('nameSel'), on = force ?? !sel.disabled;
+    $('lockBtn').onclick=()=>{
+      const sel=$('nameSel'); const on=!sel.disabled;
       if(on){ if(!sel.value){alert('名前を選択');return;} sel.disabled=true; sel.style.opacity=.6; $('lockBtn').textContent='🔓 変更'; localStorage.setItem('shiftName', sel.value); }
       else { sel.disabled=false; sel.style.opacity=1; $('lockBtn').textContent='✔︎ ロック'; localStorage.removeItem('shiftName'); }
-    }
-    $('lockBtn').onclick=()=>toggleLock();
+    };
 
     // ===== 期間 UI =====
-    let periods=nextTwoPeriods(); // [{y,m,h,dl,grace}]
+    let periods=nextTwoPeriods();
     function buildPeriodSelect(){
       const sel=$('periodSel'); sel.innerHTML='';
       periods=nextTwoPeriods();
@@ -235,25 +253,21 @@
     }
     function getSelPeriod(){
       const [y,m,h]= $('periodSel').value.split('-'); 
-      const p = periods.find(v=>v.y==y && v.m==m && v.h==h);
-      return p || periods[0];
+      return periods.find(v=>v.y==y && v.m==m && v.h==h) || periods[0];
     }
     function applyPeriodState(){
       const p=getSelPeriod();
       const now=new Date(); now.setHours(0,0,0,0);
-      const dl=p.dl, gr=graceUntil(dl);
+      const dl=p.dl, gr=p.grace;
       const state = now<=dl ? '募集中' : (now<=gr ? '猶予中（管理者のみ編集可）' : '締切済');
-      $('stateBadge').textContent = state + (currentUser?.is_admin && state!=='募集中' ? '：管理者は編集可' : '');
-      $('deadlineTxt').textContent = `${dl.getFullYear()}年${dl.getMonth()+1}月${dl.getDate()}日`;
+      document.getElementById('stateBadge').textContent = state + (currentUser?.is_admin && state!=='募集中' ? '：管理者は編集可' : '');
+      document.getElementById('deadlineTxt').textContent = `${dl.getFullYear()}年${dl.getMonth()+1}月${dl.getDate()}日`;
       const diffDays = Math.ceil(( (now<=dl?dl:gr) - now )/86400000);
-      $('remainTxt').textContent = now<=gr ? `残り ${diffDays} 日` : '受付終了';
-      // 編集可否
+      document.getElementById('remainTxt').textContent = now<=gr ? `残り ${diffDays} 日` : '受付終了';
       const canEdit = (now<=dl) || (now>dl && now<=gr && currentUser?.is_admin);
       $('submitBtn').disabled = !canEdit;
-      $('shiftForm').querySelectorAll('input,textarea').forEach(el=>{ if(el.id!=='date') el.disabled = !canEdit; });
-      // お知らせ取得
+      $('shiftForm').querySelectorAll('input,textarea,select').forEach(el=>{ if(el.id!=='date') el.disabled = !canEdit; });
       loadNotice(p.y,p.m,p.h);
-      // カレンダーの月を対象期間に寄せる（見出し）
       calYear=p.y; calMonth=p.m; rebuildCalendar();
     }
     $('periodSel').onchange = applyPeriodState;
@@ -264,13 +278,12 @@
       $('noticeBox').innerHTML = data?.message ? data.message.replace(/\n/g,'<br>') : '（お知らせはありません）';
     }
 
-    // ===== カレンダー（提出済み / 送信予定） =====
+    // ===== カレンダー =====
     const WDAY=['日','月','火','水','木','金','土'];
     function monthEndDays(){ return new Date(calYear, calMonth, 0).getDate(); }
     function parseYMD(s){const[a,b,c]=s.split('-').map(Number); return {y:a,m:b,d:c};}
-
     let calYear, calMonth;
-    let myMonthMap=new Map(); // day -> [{start_time,end_time,note}]
+    let myMonthMap=new Map();
 
     async function refreshMyMonth(){
       if(!currentUser?.name){ myMonthMap=new Map(); rebuildCalendar(); return; }
@@ -282,10 +295,17 @@
       rebuildCalendar();
     }
 
+    function inferredSlot(start){ return (start < '16:00') ? 'LUNCH' : 'DINNER'; }
+    function prettyLabel(rec){
+      const slotLabel = (inferredSlot(rec.start_time)==='LUNCH') ? 'ランチ' : 'ディナー';
+      const isCircle = rec.note && rec.note.trim().startsWith('◯');
+      return isCircle ? `${slotLabel}：◯` : `${slotLabel}：${rec.start_time.slice(0,5)}–${rec.end_time.slice(0,5)}`;
+    }
+
     function rebuildCalendar(){
       const grid=$('calGrid');
       while(grid.children.length>7) grid.removeChild(grid.lastChild);
-      $('calTitle').textContent=`${calYear}年 ${calMonth}月`;
+      document.getElementById('calTitle').textContent=`${calYear}年 ${calMonth}月`;
 
       const first=new Date(calYear,calMonth-1,1), last=new Date(calYear,calMonth,0), days=last.getDate(), startDow=first.getDay();
       const today=new Date(); today.setHours(0,0,0,0);
@@ -303,12 +323,12 @@
         div.innerHTML=`<div class="top"><div class="day">${d}</div><span class="wday">(${WDAY[dow]})</span></div>`;
         if(mine.length){
           const first=mine[0];
-          const label=`${first.start_time?.slice(0,5)}–${first.end_time?.slice(0,5)}${mine.length>1?'  +'+(mine.length-1)+'件':''}`;
+          const label=prettyLabel(first) + (mine.length>1?'  +'+(mine.length-1)+'件':'');
           const pill=document.createElement('div'); pill.className='pill'; pill.textContent=label; div.appendChild(pill);
         }
 
         div.addEventListener('click', ()=>{
-          const was=($('date').value===ymd); $('date').value=ymd; rebuildCalendar(); if(was){ $('start').focus(); }
+          const was=($('date').value===ymd); $('date').value=ymd; rebuildCalendar(); if(was){ $('startSel').focus(); }
           updateDraftPreview();
         });
 
@@ -320,12 +340,25 @@
     }
 
     function updateDraftPreview(){
-      const date=$('date').value, st=$('start').value, en=$('end').value; if(!date || !st || !en) return;
+      const date=$('date').value; if(!date) return;
+      const on=$('anytimeChk').checked;
       const {d}=parseYMD(date); const cells=$('calGrid').querySelectorAll('.cell.clickable'); const t=cells[d-1]; if(!t) return;
       t.classList.add('draft'); const old=t.querySelector('.pill.draft'); if(old)old.remove();
-      const pill=document.createElement('div'); pill.className='pill draft'; pill.textContent=`予定 ${st.slice(0,5)}–${en.slice(0,5)}`; t.appendChild(pill);
+      const slot = document.querySelector('input[name="slot"]:checked').value;
+      const text = on ? `${SLOT[slot].label}：◯` : `${SLOT[slot].label}：${$('startSel').value}–${$('endSel').value}`;
+      const pill=document.createElement('div'); pill.className='pill draft'; pill.textContent=text; t.appendChild(pill);
     }
-    $('start').addEventListener('input',updateDraftPreview); $('end').addEventListener('input',updateDraftPreview); $('date').addEventListener('change',()=>{const {y,m}=parseYMD($('date').value); if(y&&m){calYear=y; calMonth=m;} rebuildCalendar();});
+    Array.from(document.querySelectorAll('input[name="slot"]')).forEach(r=>{
+      r.addEventListener('change', ()=>{
+        buildTimeSelects(r.value);
+        uiAnytime($('anytimeChk').checked);
+        updateDraftPreview();
+      });
+    });
+    $('anytimeChk').addEventListener('change', (e)=>{ uiAnytime(e.target.checked); updateDraftPreview(); });
+    $('startSel').addEventListener('change', updateDraftPreview);
+    $('endSel').addEventListener('change', updateDraftPreview);
+    $('date').addEventListener('change', ()=>{const {y,m}=parseYMD($('date').value); if(y&&m){calYear=y; calMonth=m;} rebuildCalendar();});
 
     // ===== 送信 =====
     $('shiftForm').addEventListener('submit', async (e)=>{
@@ -334,7 +367,16 @@
       const canEdit = (now<=p.dl) || (now>p.dl && now<=p.grace && currentUser?.is_admin);
       if(!canEdit){ $('msg').innerHTML='<span class="warn">この期間は現在編集できません</span>'; return; }
 
-      const row={ staff_name: currentUser.name, date:$('date').value, start_time:$('start').value, end_time:$('end').value, note: $('note').value.trim()||null };
+      const slot = document.querySelector('input[name="slot"]:checked').value; // LUNCH/DINNER
+      const any = $('anytimeChk').checked;
+      const start = any ? SLOT[slot].start : $('startSel').value;
+      const end   = any ? SLOT[slot].end   : $('endSel').value;
+      if(!any && start >= end){ $('msg').innerHTML='<span class="err">開始は終了より前にしてください</span>'; return; }
+
+      const noteUser = $('note').value.trim();
+      const note = (any ? '◯ ' : '') + (noteUser || '');
+      const row={ staff_name: currentUser.name, date:$('date').value, start_time:start, end_time:end, note: note || null };
+
       $('msg').textContent='送信中…';
       const { error } = await client.from('shifts').insert(row);
       if(error){ $('msg').innerHTML='<span class="err">Error: '+error.message+'</span>'; return; }
@@ -343,26 +385,34 @@
       const {d}=parseYMD(row.date); const arr=myMonthMap.get(d)||[]; arr.unshift({start_time:row.start_time,end_time:row.end_time,note:row.note}); myMonthMap.set(d,arr);
       rebuildCalendar();
       const cells=$('calGrid').querySelectorAll('.cell.clickable'); const t=cells[d-1]; if(t){ t.classList.add('flash'); setTimeout(()=>t.classList.remove('flash'),1000); }
-      e.target.reset(); $('date').value=row.date; updateDraftPreview(); loadList();
+      e.target.reset();
+      document.querySelector('input[name="slot"][value="LUNCH"]').checked = true;
+      buildTimeSelects('LUNCH'); uiAnytime(false);
+      $('date').value = row.date;
+      updateDraftPreview(); loadList();
     });
 
     // ===== 最新10件 =====
     async function loadList(){
       const { data, error } = await client.from('shifts').select('*').order('date',{ascending:false}).order('created_at',{ascending:false}).limit(10);
       if(error){ $('list').innerHTML='<li class="err">読み込みエラー</li>'; return; }
-      $('list').innerHTML = data.length ? data.map(s=>`<li>${s.date} ｜ ${s.staff_name} ｜ ${s.start_time}–${s.end_time} ${s.note? '（'+s.note+'）':''}</li>`).join('') : '<li>まだ提出はありません</li>';
+      $('list').innerHTML = data.length ? data.map(s=>{
+        const isCircle = s.note && s.note.trim().startsWith('◯');
+        const slot = (s.start_time < '16:00') ? 'ランチ' : 'ディナー';
+        return `<li>${s.date} ｜ ${s.staff_name} ｜ ${slot}：${isCircle?'◯':`${s.start_time.slice(0,5)}–${s.end_time.slice(0,5)}`} ${s.note? '（'+s.note.replace(/^◯\s*/,'')+'）':''}</li>`;
+      }).join('') : '<li>まだ提出はありません</li>';
     }
 
     // ===== 初期化 =====
     (async ()=>{
       buildPeriodSelect();
-      const t=new Date(); calYear=t.getFullYear(); calMonth=t.getMonth()+1; $('date').value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
-      await loadStaff();
-      await refreshMyMonth();
-      await loadList();
+      const t=new Date(); calYear=t.getFullYear(); calMonth=t.getMonth()+1;
+      $('date').value = fmtYMD(t.getFullYear(), t.getMonth()+1, t.getDate());
+      buildTimeSelects('LUNCH'); uiAnytime(false);
+      await loadStaff(); await refreshMyMonth(); await loadList();
     })();
 
-    // 月ナビゲーション（閲覧専用）
+    // 月ナビゲーション
     $('prevMonth').onclick=()=>{calMonth--; if(calMonth===0){calMonth=12; calYear--;} rebuildCalendar();};
     $('nextMonth').onclick=()=>{calMonth++; if(calMonth===13){calMonth=1; calYear++;} rebuildCalendar();};
     $('thisMonth').onclick=()=>{const t=new Date(); calYear=t.getFullYear(); calMonth=t.getMonth()+1; rebuildCalendar();};
