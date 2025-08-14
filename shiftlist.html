@@ -1,86 +1,116 @@
-<!DOCTYPE html><html lang="ja">
+<!DOCTYPE html>
+<html lang="ja">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>提出されたシフト一覧（Supabase版）</title>
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>提出済みシフト一覧</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-body{font-family:system-ui,sans-serif;padding:24px;max-width:1100px;margin:auto;background:#fafafa}
-h2{font-size:1.4rem;margin-bottom:16px}
-a.btn{display:inline-block;text-decoration:none;border-radius:10px;padding:10px 18px;margin-right:8px;font-weight:600}
-a.index{background:#fff;color:#111827;border:1px solid #e5e7eb}
-table{width:100%;border-collapse:collapse;margin-top:12px;background:#fff}
-th,td{border:1px solid #e5e7eb;padding:6px;text-align:center}
-th{background:#f7f7f7}
-#status{margin-top:8px;color:#666}
-.controls{margin-top:10px}
-select,button{padding:8px 12px;border:1px solid #e5e7eb;border-radius:10px}
-button{background:#111827;color:#fff;font-weight:600}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;max-width:1000px;margin:26px auto;padding:0 14px}
+  h1{font-size:1.6rem;margin:0 0 .5rem}
+  .note{color:#6b7280}
+  input,select,button{padding:10px;border:1px solid #e5e7eb;border-radius:10px;font-size:16px;background:#fff}
+  button{background:#111827;color:#fff;font-weight:700;border:none;cursor:pointer}
+  button.ghost{background:#fff;color:#111827;border:1px solid #e5e7eb}
+  button:hover{opacity:.92}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+  table{border-collapse:collapse;width:100%;margin-top:10px}
+  th,td{border:1px solid #e5e7eb;padding:6px;text-align:center}
+  th{background:#f7f7f7}
+  .auth{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
 </style>
 </head>
 <body>
-<h2>提出されたシフト一覧</h2>
-<p><a class="btn index" href="./index.html">← 提出画面へ戻る</a></p>
+  <h1>提出済みシフト一覧</h1>
+  <div class="auth">
+    <span id="who" class="note">認証チェック中…</span>
+    <input id="email" placeholder="メールアドレス" style="max-width:240px;display:none">
+    <button id="loginBtn" class="ghost" style="display:none">ログインリンク送信</button>
+    <button id="logoutBtn" class="ghost" style="display:none">ログアウト</button>
+    <button class="ghost" onclick="location.href='index.html'">← 提出ページへ</button>
+  </div>
 
-<div class="controls">
-  <label>表示する期間：
-    <select id="year"></select>
-    <select id="month"></select>
-    <select id="half"><option value="前半">前半（1〜15日）</option><option value="後半">後半（16〜月末）</option></select>
+  <div class="row">
+    <label>表示月：<input type="month" id="month"></label>
+    <label>スタッフ：<input id="name" placeholder="（空なら全員）"></label>
     <button id="loadBtn">表示</button>
-  </label>
-</div>
+  </div>
 
-<div id="status">読み込み待ち…</div>
-<table id="shiftTable"><tr><td>期間を選んで「表示」を押してください</td></tr></table>
+  <table id="tbl">
+    <thead>
+      <tr><th>日付</th><th>スタッフ名</th><th>区分</th><th>開始</th><th>終了</th><th>備考</th></tr>
+    </thead>
+    <tbody><tr><td colspan="6" class="note">データ未表示</td></tr></tbody>
+  </table>
 
 <script>
-const SUPABASE_URL="https://wnttziqspjkrinymnodz.supabase.co";
-const SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI";
-const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-const $=id=>document.getElementById(id), status=$('status'), tbl=$('shiftTable');
+/* ===== Supabase（差し替え必須） ===== */
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI";
+const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+/* ================================== */
 
-(function initYM(){
-  const now=new Date();
-  for(let y=now.getFullYear()-1;y<=now.getFullYear()+1;y++){
-    const o=document.createElement('option');o.value=y;o.textContent=`${y}年`; if(y===now.getFullYear())o.selected=true; $('year').appendChild(o);
+const $=id=>document.getElementById(id);
+
+/* --- 認証必須ページ --- */
+async function ensureAuth(){
+  const { data:{ session } } = await supa.auth.getSession();
+  if(session?.user){
+    $('who').textContent = session.user.email || '(ログイン中)';
+    $('email').style.display='none';
+    $('loginBtn').style.display='none';
+    $('logoutBtn').style.display='';
+    return true;
+  }else{
+    $('who').textContent = '未ログインです。メールを入力してログインしてください。';
+    $('email').style.display='';
+    $('loginBtn').style.display='';
+    $('logoutBtn').style.display='none';
+    return false;
   }
-  for(let m=1;m<=12;m++){
-    const o=document.createElement('option');o.value=m;o.textContent=`${m}月`; if(m===now.getMonth()+1)o.selected=true; $('month').appendChild(o);
-  }
-})();
-$('loadBtn').onclick=loadShift;
-
-async function loadShift(){
-  const y=+$('year').value, m=+$('month').value, h=$('half').value;
-  status.textContent='読み込み中…'; tbl.innerHTML='<tr><td>読み込み中…</td></tr>';
-
-  const { data: p } = await client.from('periods').select().eq('year',y).eq('month',m).eq('half',h).maybeSingle();
-  if(!p){ status.textContent='該当期間のデータがありません'; tbl.innerHTML='<tr><td>データなし</td></tr>'; return; }
-
-  const { data: rows, error } = await client.from('shifts')
-    .select('day,value,type,staff:staff_id(name)')
-    .eq('period_id',p.id).order('type').order('staff_id').order('day');
-  if(error){ status.textContent='エラー: '+error.message; return; }
-
-  const map = new Map();  // key: "name__type" → {name,type,days[15]}
-  rows.forEach(r=>{
-    const key = `${r.staff.name}__${r.type}`;
-    if(!map.has(key)) map.set(key,{name:r.staff.name,type:r.type,days:Array(15).fill('')});
-    const idx = (h==='前半') ? r.day-1 : r.day-16;
-    if(0<=idx && idx<15) map.get(key).days[idx]=r.value||'';
-  });
-
-  if(map.size===0){ status.textContent='提出0件'; tbl.innerHTML='<tr><td>データなし</td></tr>'; return; }
-
-  status.textContent=`取得件数：${map.size} 行`;
-  let html='<tr><th>名前</th><th>区分</th>';
-  for(let d=1; d<=15; d++) html+=`<th>${d}</th>`; html+='</tr>';
-  for(const v of map.values()){
-    html+=`<tr><td>${v.name}</td><td>${v.type==='LUNCH'?'ランチ':'ディナー'}</td>`+
-          v.days.map(x=>`<td>${x||''}</td>`).join('') + '</tr>';
-  }
-  tbl.innerHTML=html;
 }
-loadShift();
+$('loginBtn').onclick=async()=>{
+  const email=$('email').value.trim(); if(!email) return alert('メールを入力してください');
+  const { error } = await supa.auth.signInWithOtp({ email });
+  if(error) return alert(error.message);
+  alert('ログイン用リンクをメールで送信しました。メールをご確認ください。');
+};
+$('logoutBtn').onclick=async()=>{ await supa.auth.signOut(); await ensureAuth(); };
+
+supa.auth.onAuthStateChange((_e,_s)=> ensureAuth());
+
+/* --- 一覧表示 --- */
+$('loadBtn').onclick = async ()=>{
+  if(!await ensureAuth()) return;
+  const ym = $('month').value;
+  if(!ym) return alert('年月を選択してください');
+
+  const start = ym + "-01";
+  const endDate = new Date(start); endDate.setMonth(endDate.getMonth()+1);
+  const endStr = endDate.toISOString().slice(0,10);
+
+  let q = supa.from('shifts').select('*').gte('date', start).lt('date', endStr).order('date',{ascending:true}).order('start_time',{ascending:true});
+  const nm = $('name').value.trim(); if(nm) q = q.eq('staff_name', nm);
+  const { data, error } = await q;
+  if(error) return alert(error.message);
+
+  const tb=$('tbl').querySelector('tbody'); tb.innerHTML='';
+  if(!data.length){ tb.innerHTML='<tr><td colspan="6" class="note">該当データがありません</td></tr>'; return; }
+
+  data.forEach(r=>{
+    const slot = (r.start_time<'16:00')?'ランチ':'ディナー';
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${r.date}</td><td>${r.staff_name}</td><td>${slot}</td><td>${r.start_time}</td><td>${r.end_time}</td><td>${r.note||''}</td>`;
+    tb.appendChild(tr);
+  });
+};
+
+/* --- 初期化：当月をセット & 認証チェック --- */
+(function init(){
+  const t=new Date(); const ym=`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}`;
+  $('month').value = ym;
+  ensureAuth();
+})();
 </script>
-</body></html>
+</body>
+</html>
