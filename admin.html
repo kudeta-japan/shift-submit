@@ -1,0 +1,134 @@
+<!DOCTYPE html><html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KU-DETA 管理ページ（Supabase版）</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+body{font-family:system-ui;padding:24px;max-width:820px;margin:auto;background:#fafafa}
+h2{margin-top:0}
+fieldset{border:1px solid #e5e7eb;border-radius:12px;margin-top:20px;padding:14px;background:#fff}
+legend{padding:0 6px;font-weight:700;color:#6b7280}
+label{display:block;margin-top:10px;font-weight:600}
+input,select,textarea,button{padding:10px;border:1px solid #e5e7eb;border-radius:10px}
+button{background:#111827;color:#fff;font-weight:600;cursor:pointer}
+table{border-collapse:collapse;width:100%;margin-top:12px;background:#fff}
+th,td{border:1px solid #e5e7eb;padding:8px;text-align:left}
+th{background:#f7f7f7}
+a.btn{display:inline-block;text-decoration:none;border-radius:10px;padding:10px 18px;margin-right:8px;font-weight:600;background:#fff;color:#111827;border:1px solid #e5e7eb}
+.small{color:#6b7280;font-size:.9rem;margin-top:8px}
+</style>
+</head>
+<body>
+<h2>KU-DETA 管理ページ</h2>
+<p><a href="./index.html" class="btn">← 提出画面へ</a> <a href="./shiftlist.html" class="btn">提出一覧</a></p>
+
+<!-- 管理ログイン（メールリンク式） -->
+<fieldset>
+  <legend>ログイン</legend>
+  <label>メール <input id="email" placeholder="管理者メール"></label>
+  <button id="magic">メールでログインリンク送信</button>
+  <div class="small">※ 初回はSupabaseのメールリンクでログイン → そのUserIDを <code>admins</code> テーブルに登録してください</div>
+  <div id="authMsg" class="small"></div>
+</fieldset>
+
+<!-- お知らせ -->
+<fieldset>
+  <legend>お知らせ</legend>
+  <label>期間 <select id="period"></select></label>
+  <label>本文 <textarea id="notice" rows="4"></textarea></label>
+  <button id="saveNotice">保存</button>
+  <div id="nMsg" class="small"></div>
+</fieldset>
+
+<!-- スタッフ -->
+<fieldset>
+  <legend>スタッフ</legend>
+  <div>
+    <input id="newName" placeholder="新規スタッフ名">
+    <button id="addStaff">追加</button>
+  </div>
+  <table>
+    <thead><tr><th>名前</th><th>含める</th><th>削除</th></tr></thead>
+    <tbody id="sBody"></tbody>
+  </table>
+  <div id="sMsg" class="small"></div>
+</fieldset>
+
+<script>
+const SUPABASE_URL="https://wnttziqspjkrinymnodz.supabase.co";
+const SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI";
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $=id=>document.getElementById(id);
+
+$('magic').onclick=async()=>{
+  const email=$('email').value.trim(); if(!email){alert('メールを入力'); return;}
+  const { error } = await client.auth.signInWithOtp({ email });
+  $('authMsg').textContent = error ? 'エラー: '+error.message : 'ログインリンクを送信しました。メールを確認してください。';
+};
+
+(function buildPeriods(){
+  const t = new Date(); t.setHours(0,0,0,0);
+  const lbl = {'前半':'1-15日','後半':'16-月末'};
+  let y=t.getFullYear(), m=t.getMonth()+1, h=t.getDate()<=15?'前半':'後半';
+  const rawDeadline=(Y,M,H)=>(H==='前半')?new Date(Y,M-2,15):new Date(Y,M-1,0);
+  const showUntil=(Y,M,H)=>{const d=rawDeadline(Y,M,H); d.setDate(d.getDate()+3); return d;};
+  let list=[];
+  // 直近半期
+  let py=y, pm=m, ph=(h==='前半'?'後半':'前半'); if(h==='前半'){ pm--; if(pm===0){pm=12;py--;}}
+  if(showUntil(py,pm,ph)>=t) list.push([py,pm,ph]);
+  // 次3件
+  let cy=y, cm=m, ch=(h==='前半'?'後半':'前半'); if(h==='後半'){ cm++; if(cm===13){cm=1;cy++;}}
+  for(let i=0;i<3;){
+    if(showUntil(cy,cm,ch)>=t){ list.push([cy,cm,ch]); i++; }
+    if(ch==='前半'){ ch='後半'; } else { ch='前半'; cm++; if(cm===13){cm=1;cy++;} }
+  }
+  list.forEach(([Y,M,H])=>$('period').add(new Option(`${Y}年${M}月 ${H==='前半'?'1-15日':'16-月末'}`,`${Y}-${M}-${H}`)));
+  loadNotice();
+})();
+$('period').onchange = loadNotice;
+
+async function loadNotice(){
+  const [y,m,h]=$('period').value.split('-'); const Y=+y,M=+m,H=h;
+  const { data: p } = await client.from('periods').upsert({year:Y, month:M, half:H},{onConflict:'year,month,half'}).select().single();
+  const { data: n } = await client.from('notices').select().eq('period_id',p.id).maybeSingle();
+  $('notice').value = n?.message || '';
+  loadStaff();
+}
+$('saveNotice').onclick = async ()=>{
+  const [y,m,h]=$('period').value.split('-'); const Y=+y,M=+m,H=h;
+  const { data: p } = await client.from('periods').upsert({year:Y, month:M, half:H},{onConflict:'year,month,half'}).select().single();
+  const text = $('notice').value;
+  const { data: n } = await client.from('notices').select().eq('period_id',p.id).maybeSingle();
+  let err;
+  if(n) { err = (await client.from('notices').update({message:text}).eq('period_id',p.id)).error; }
+  else  { err = (await client.from('notices').insert({period_id:p.id, message:text})).error; }
+  $('nMsg').textContent = err ? 'エラー: '+err.message : '保存しました';
+};
+
+async function loadStaff(){
+  const { data: arr } = await client.from('staff').select().order('name');
+  const body=$('sBody'); body.innerHTML='';
+  (arr||[]).forEach(o=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${o.name}</td><td><input type="checkbox" ${o.include?'checked':''}></td><td><button>削除</button></td>`;
+    tr.querySelector('input').onchange = async ev=>{
+      const { error } = await client.from('staff').update({include:ev.target.checked}).eq('id',o.id);
+      $('sMsg').textContent = error ? 'エラー: '+error.message : '更新しました';
+    };
+    tr.querySelector('button').onclick = async ()=>{
+      if(!confirm(`${o.name} を削除しますか？`)) return;
+      const { error } = await client.from('staff').delete().eq('id',o.id);
+      $('sMsg').textContent = error ? 'エラー: '+error.message : '削除しました';
+      loadStaff();
+    };
+    body.appendChild(tr);
+  });
+}
+$('addStaff').onclick = async ()=>{
+  const nm=$('newName').value.trim(); if(!nm){alert('名前を入力');return;}
+  const { error } = await client.from('staff').insert({ name:nm });
+  $('sMsg').textContent = error ? 'エラー: '+error.message : '追加しました';
+  $('newName').value=''; loadStaff();
+};
+</script>
+</body></html>
