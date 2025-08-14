@@ -3,15 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>KU-DETA シフト提出（Supabase / カレンダー版）</title>
+  <title>KU-DETA シフト提出（Supabase / カレンダー改良版）</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    :root{--fg:#111827;--muted:#6b7280;--border:#e5e7eb;--bg:#fafafa;--pri:#111827;--ok:#0a8;--err:#d22}
+    :root{
+      --fg:#111827; --muted:#6b7280; --border:#e5e7eb; --bg:#fafafa; --pri:#111827;
+      --ok:#0a8; --err:#d22;
+      --cell-bg:#ffffff; --cell-submitted:#e6f7ee; --cell-hover:#f3f4f6; --today-ring:#22c55e;
+      --sun:#e11d48; --sat:#2563eb;
+    }
     *{box-sizing:border-box}
-    body{font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans JP", sans-serif;
-         max-width:980px;margin:32px auto;padding:0 16px;background:var(--bg);color:var(--fg)}
+    body{
+      font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans JP", sans-serif;
+      max-width:1000px;margin:32px auto;padding:0 16px;background:var(--bg);color:var(--fg)
+    }
     h1{font-size:1.6rem;margin:0 0 .5rem}
-    h2{font-size:1.2rem;margin:24px 0 8px}
+    h2{font-size:1.1rem;margin:20px 0 8px}
     label{display:block;margin:.6rem 0 .2rem;font-weight:600}
     input,select,button,textarea{padding:10px;border:1px solid var(--border);border-radius:10px;font-size:16px;background:#fff}
     button{background:var(--pri);color:#fff;font-weight:700;border:none;cursor:pointer}
@@ -25,34 +32,54 @@
     .nav a{display:inline-block;margin-right:12px;text-decoration:none;color:var(--pri);font-weight:700}
 
     /* カレンダー */
-    .cal-wrap{margin-top:12px;background:#fff;border:1px solid var(--border);border-radius:12px}
+    .cal-wrap{margin-top:12px;background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden}
     .cal-head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border)}
     .cal-title{font-weight:800}
+    .cal-actions{display:flex;gap:8px}
+    .ghost{background:#fff;color:var(--fg);border:1px solid var(--border)}
+    .cal-legend{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:.85rem}
+    .dot{width:12px;height:12px;border-radius:3px;display:inline-block;border:1px solid var(--border)}
+    .lg-submitted{background:var(--cell-submitted)}
+    .lg-today{border-color:var(--today-ring)}
+    .lg-selected{background:var(--cell-hover)}
+
     .cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
     .dow{font-weight:700;font-size:.9rem;color:#374151;padding:8px 0;text-align:center;background:#f7f7f7;border-bottom:1px solid var(--border)}
-    .cell{min-height:84px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:6px;position:relative}
+    .cell{
+      min-height:88px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+      padding:6px;position:relative;background:var(--cell-bg);transition:background-color .15s ease
+    }
+    .cell:hover{background:var(--cell-hover)}
     .cell:last-child{border-right:0}
-    .cell .day{font-weight:700;font-size:.95rem}
-    .cell .wday{font-size:.75rem;color:var(--muted);margin-left:4px}
+    .cell .top{display:flex;gap:6px;align-items:center}
+    .cell .day{font-weight:800;font-size:1rem}
+    .cell .wday{font-size:.75rem;color:var(--muted)}
     .muted{color:#9ca3af}
-    .sun .day{color:#e11d48} /* 日曜：赤 */
-    .sat .day{color:#2563eb} /* 土曜：青 */
+    .sun .day{color:var(--sun)} /* 日曜：赤 */
+    .sat .day{color:var(--sat)} /* 土曜：青 */
     .clickable{cursor:pointer}
-    .cell.selected{outline:2px solid #111827; outline-offset:-2px; border-radius:6px}
-    .pill{position:absolute;bottom:6px;left:6px;right:6px;font-size:.75rem;color:#374151;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:4px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .selected{outline:2px solid #111827; outline-offset:-2px; border-radius:6px}
+    .today-ring{box-shadow:0 0 0 2px var(--today-ring) inset;border-radius:6px}
+    .has-shift{background:var(--cell-submitted)}
+    .pill{
+      position:absolute;bottom:6px;left:6px;right:6px;font-size:.78rem;color:#374151;
+      background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:4px 6px;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+    }
+    .flash{animation:flash 900ms ease}
+    @keyframes flash{0%{box-shadow:0 0 0 0 rgba(34,197,94,.0)}40%{box-shadow:0 0 0 6px rgba(34,197,94,.35)}100%{box-shadow:0 0 0 0 rgba(34,197,94,.0)}}
 
-    /* レイアウト微調整 */
-    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    @media (max-width:860px){ .two-col{grid-template-columns:1fr} }
+    .two-col{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}
+    @media (max-width:900px){ .two-col{grid-template-columns:1fr} }
   </style>
 </head>
 <body>
   <h1>KU‑DETA シフト提出</h1>
-  <p class="note">まずは名前を選ぶか、新規登録してください。日曜は左端の7列カレンダーで日付を選べます。</p>
+  <p class="note">まずは名前を選ぶか、新規登録してください。日曜は左端の 7 列カレンダーで、クリックすると右のフォームに日付が入ります。</p>
 
   <!-- 名前選択 + 新規登録 + ロック -->
   <div class="row">
-    <div style="flex:1;min-width:240px">
+    <div style="flex:1;min-width:260px">
       <label>あなたの名前（登録済み）</label>
       <select id="nameSel"></select>
     </div>
@@ -73,15 +100,24 @@
   <div class="two-col">
     <!-- 左：カレンダー -->
     <section>
-      <h2>カレンダー（日曜始まり 7列）</h2>
       <div class="cal-wrap">
         <div class="cal-head">
-          <button id="prevMonth" title="前の月">‹</button>
           <div class="cal-title" id="calTitle">—</div>
-          <button id="nextMonth" title="次の月">›</button>
+          <div class="cal-actions">
+            <button id="prevMonth" class="ghost" title="前の月">‹ 前月</button>
+            <button id="thisMonth" class="ghost" title="今月">今月</button>
+            <button id="nextMonth" class="ghost" title="次の月">次月 ›</button>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border)">
+          <div class="cal-legend">
+            <span class="dot lg-submitted"></span> 提出済み
+            <span class="dot lg-today"></span> 今日
+            <span class="dot lg-selected"></span> 選択中
+          </div>
+          <div class="note">クリックで日付を選択／再クリックで右の送信</div>
         </div>
         <div class="cal-grid" id="calGrid">
-          <!-- 曜日ヘッダ -->
           <div class="dow">日</div><div class="dow">月</div><div class="dow">火</div>
           <div class="dow">水</div><div class="dow">木</div><div class="dow">金</div><div class="dow">土</div>
           <!-- 日付セルはJSで生成 -->
@@ -93,7 +129,7 @@
     <section>
       <h2>この日のシフトを登録</h2>
       <form id="shiftForm">
-        <label>日付（カレンダーでクリックでも可）</label>
+        <label>日付（カレンダーから選択可）</label>
         <input type="date" id="date" required />
 
         <div class="row">
@@ -110,7 +146,7 @@
         <label>備考（任意）</label>
         <textarea id="note" rows="2" placeholder="遅刻・早退・希望など"></textarea>
 
-        <button type="submit" style="margin-top:12px">送信</button>
+        <button type="submit" style="margin-top:12px">📨 送信</button>
         <div id="msg" class="note"></div>
       </form>
 
@@ -124,10 +160,10 @@
   </div>
 
   <script>
-    // ====== 自分の Supabase 情報に置換 ======
+    // ====== Supabase（自分の値に置換） ======
     const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI";
-    // ========================================
+    // =========================================
     const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const $ = id => document.getElementById(id);
 
@@ -143,9 +179,10 @@
       });
       if(!sel.value && data?.length) sel.value = data[0].name;
 
-      // ロック復元
       const sv = localStorage.getItem('shiftName');
       if(sv && [...sel.options].some(o=>o.value===sv)){ sel.value=sv; toggleLock(true); }
+      // カレンダーの提出状況更新
+      refreshMyMonth();
     }
     $('addBtn').onclick = async ()=>{
       const nm = $('newName').value.trim();
@@ -171,55 +208,113 @@
         sel.disabled = false; sel.style.opacity=1; $('lockBtn').textContent='✔︎ ロック';
         localStorage.removeItem('shiftName');
       }
+      refreshMyMonth();
     }
     $('lockBtn').onclick = ()=>toggleLock();
+    $('nameSel').onchange = ()=>refreshMyMonth();
 
-    // ==== カレンダー ====
+    // ==== ユーティリティ ====
     const WDAY = ['日','月','火','水','木','金','土'];
+    function fmtYMD(y,m,d){ return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+    function parseYMD(s){ const [y,m,d]=s.split('-').map(Number); return {y,m,d}; }
+
+    // ==== カレンダー状態 ====
     let calYear, calMonth; // 1-12
-    function fmtYMD(y,m,d){
-      return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    let myMonthMap = new Map(); // day -> [{start_time,end_time,note}, ...]
+
+    async function refreshMyMonth(){
+      // 選択中の月×選択中の名前で、その月の提出を取得
+      const name = $('nameSel').value;
+      if(!name){ myMonthMap = new Map(); rebuildCalendar(); return; }
+      const from = fmtYMD(calYear, calMonth, 1);
+      const toDate = new Date(calYear, calMonth, 0).getDate();
+      const to = fmtYMD(calYear, calMonth, toDate);
+
+      const { data, error } = await client
+        .from('shifts')
+        .select('date,start_time,end_time,note')
+        .eq('staff_name', name)
+        .gte('date', from).lte('date', to);
+
+      myMonthMap = new Map();
+      if(!error && Array.isArray(data)){
+        data.forEach(r=>{
+          const d = Number(r.date.slice(-2));
+          const arr = myMonthMap.get(d) || [];
+          arr.push(r);
+          myMonthMap.set(d, arr);
+        });
+      }
+      rebuildCalendar();
     }
+
     function rebuildCalendar(){
       const grid = $('calGrid');
-      // 既存の日付セルを一掃（曜日ヘッダ7個は残す）
+      // 曜日ヘッダ7個を残してクリア
       while(grid.children.length > 7) grid.removeChild(grid.lastChild);
 
       const first = new Date(calYear, calMonth-1, 1);
       const last  = new Date(calYear, calMonth, 0);
       const days  = last.getDate();
       const startDow = first.getDay(); // 0=日
-
+      const today = new Date(); today.setHours(0,0,0,0);
       $('calTitle').textContent = `${calYear}年 ${calMonth}月`;
 
-      // 前に空白（日曜始まり調整）
+      // 前の空白
       for(let i=0;i<startDow;i++){
         const div = document.createElement('div');
         div.className = 'cell muted';
         grid.appendChild(div);
       }
 
-      // 当月セル
       const selected = $('date').value; // yyyy-mm-dd
       for(let d=1; d<=days; d++){
         const dow = new Date(calYear, calMonth-1, d).getDay();
         const div = document.createElement('div');
-        div.className = 'cell clickable ' + (dow===0?'sun':dow===6?'sat':'');
         const ymd = fmtYMD(calYear,calMonth,d);
-        div.innerHTML = `<div class="day">${d}</div><span class="wday">(${WDAY[dow]})</span>`;
-        if(selected === ymd) div.classList.add('selected');
 
+        let cls = 'cell clickable';
+        if(dow===0) cls+=' sun'; else if(dow===6) cls+=' sat';
+        if(selected === ymd) cls+=' selected';
+
+        const isToday = (today.getFullYear()===calYear && (today.getMonth()+1)===calMonth && today.getDate()===d);
+        if(isToday) cls+=' today-ring';
+
+        // 提出済み（この名前で当月）
+        const mine = myMonthMap.get(d) || [];
+        if(mine.length) cls+=' has-shift';
+
+        div.className = cls;
+        div.innerHTML = `
+          <div class="top">
+            <div class="day">${d}</div>
+            <span class="wday">(${WDAY[dow]})</span>
+          </div>
+        `;
+
+        if(mine.length){
+          // 1件目の時間を表示、他は +n 件
+          const first = mine[0];
+          const label = `${first.start_time?.slice(0,5) || '--:--'}–${first.end_time?.slice(0,5) || '--:--'}${mine.length>1 ? '　+'+(mine.length-1)+'件' : ''}`;
+          const pill = document.createElement('div');
+          pill.className='pill';
+          pill.textContent = label;
+          div.appendChild(pill);
+        }
+
+        // クリックで日付セット & 連続クリックで送信欄へフォーカス
         div.addEventListener('click', ()=>{
+          const wasSelected = ($('date').value === ymd);
           $('date').value = ymd;
           rebuildCalendar();
+          if(wasSelected){ $('start').focus(); }
         });
 
         grid.appendChild(div);
       }
 
-      // 後ろの空白で行を埋める
-      const cells = grid.children.length;
-      const rem = cells % 7;
+      // 後ろの空白
+      const rem = grid.children.length % 7;
       if(rem !== 0){
         for(let i=0;i<7-rem;i++){
           const div = document.createElement('div');
@@ -228,6 +323,7 @@
         }
       }
     }
+
     function initCalendarFromToday(){
       const t = new Date();
       calYear = t.getFullYear();
@@ -235,16 +331,12 @@
       $('date').value = fmtYMD(calYear, calMonth, t.getDate());
       rebuildCalendar();
     }
-    $('prevMonth').onclick = ()=>{
-      calMonth--; if(calMonth===0){ calMonth=12; calYear--; }
-      rebuildCalendar();
-    };
-    $('nextMonth').onclick = ()=>{
-      calMonth++; if(calMonth===13){ calMonth=1; calYear++; }
-      rebuildCalendar();
-    };
+    $('prevMonth').onclick = ()=>{ calMonth--; if(calMonth===0){ calMonth=12; calYear--; } refreshMyMonth(); };
+    $('nextMonth').onclick = ()=>{ calMonth++; if(calMonth===13){ calMonth=1; calYear++; } refreshMyMonth(); };
+    $('thisMonth').onclick = ()=>{ const t=new Date(); calYear=t.getFullYear(); calMonth=t.getMonth()+1; refreshMyMonth(); };
+
     $('date').addEventListener('change', ()=>{
-      const [y,m] = $('date').value.split('-').map(Number);
+      const {y,m} = parseYMD($('date').value);
       if(y && m){ calYear=y; calMonth=m; rebuildCalendar(); }
     });
 
@@ -264,12 +356,25 @@
       };
       const { error } = await client.from('shifts').insert(row);
       if(error){ $('msg').innerHTML = '<span class="err">Error: '+error.message+'</span>'; return; }
-      $('msg').innerHTML = '<span class="ok">送信しました ✔︎</span>';
-      e.target.reset();
 
-      // 送信後も選択日を維持：dateを今日に戻してから再セット
-      const today = new Date(); $('date').value = fmtYMD(today.getFullYear(), today.getMonth()+1, today.getDate());
+      $('msg').innerHTML = '<span class="ok">送信しました ✔︎</span>';
+      // 送信直後にセルをフラッシュさせる
+      const {y,m,d} = parseYMD(row.date);
+      // ローカルの月データを更新（再取得でもOKだが体感を軽く）
+      const arr = myMonthMap.get(d) || [];
+      arr.unshift({start_time:row.start_time, end_time:row.end_time, note:row.note});
+      myMonthMap.set(d, arr);
       rebuildCalendar();
+      // flash
+      const grid = $('calGrid');
+      // 曜日ヘッダ7個 + 前方空白 + (d) 番目セルの位置を算出するのは面倒なので、再描画後に querySelector で拾う
+      const cellList = grid.querySelectorAll('.cell.clickable');
+      // 前方空白は :not(.clickable) なので、当月セルは順に並ぶ → (d-1) 番目が該当
+      const target = cellList[d-1];
+      if(target){ target.classList.add('flash'); setTimeout(()=>target.classList.remove('flash'), 1000); }
+
+      e.target.reset();
+      $('date').value = fmtYMD(calYear, calMonth, d); // 選択維持
       loadList();
     });
 
@@ -284,13 +389,14 @@
       if(error){ $('list').innerHTML = '<li class="err">読み込みエラー</li>'; return; }
       if(!data.length){ $('list').innerHTML = '<li>まだ提出はありません</li>'; return; }
       $('list').innerHTML = data.map(s =>
-        `<li>${s.date} ｜ ${s.staff_name} ｜ ${s.start_time}〜${s.end_time} ${s.note? '（'+s.note+'）':''}</li>`
+        `<li>${s.date} ｜ ${s.staff_name} ｜ ${s.start_time}–${s.end_time} ${s.note? '（'+s.note+'）':''}</li>`
       ).join('');
     }
 
     // ==== 初期ロード ====
     loadStaff().then(()=>{
       initCalendarFromToday();
+      refreshMyMonth();
       loadList();
     });
   </script>
