@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>KU-DETA シフト提出</title>
+</head>
+<body>
+  <h1>シフト提出フォーム</h1>
+  <form id="shiftForm">
+    <label>名前: <input type="text" id="staff_name" required></label><br>
+    <label>日付: <input type="date" id="date" required></label><br>
+    <label>開始時間: <input type="time" id="start_time" required></label><br>
+    <label>終了時間: <input type="time" id="end_time" required></label><br>
+    <label>備考: <input type="text" id="note"></label><br>
+    <button type="submit">送信</button>
+  </form>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co"; // 自分のURL
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI"; // 自分のキー
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    document.getElementById('shiftForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const staff_name = document.getElementById('staff_name').value;
+      const date = document.getElementById('date').value;
+      const start_time = document.getElementById('start_time').value;
+      const end_time = document.getElementById('end_time').value;
+      const note = document.getElementById('note').value;
+
+      const { error } = await supabase
+        .from('shifts')
+        .insert([{ staff_name, date, start_time, end_time, note }]);
+
+      if (error) {
+        alert('エラー: ' + error.message);
+      } else {
+        alert('送信しました！');
+        document.getElementById('shiftForm').reset();
+      }
+    });
+  </script>
+</body>
+</html>
