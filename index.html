@@ -22,7 +22,7 @@
   button.ghost{background:#fff;color:var(--fg);border:1px solid var(--border)}
   button:hover{opacity:.92}
 
-  /* 上段：超コンパクト */
+  /* 上段 */
   .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
   .bar > *{flex:1 1 210px}
   .badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);background:#fff;border-radius:999px;padding:6px 10px}
@@ -93,7 +93,7 @@
     <span class="note" id="noticeBox" style="margin-left:auto">（お知らせはありません）</span>
   </div>
 
-  <!-- 入力カード（簡潔） -->
+  <!-- 入力カード -->
   <section class="card">
     <div class="grid2">
       <div>
@@ -161,11 +161,11 @@
   </section>
 
 <script>
-/* ===== Supabase（差し替え） ===== */
+/* ===== Supabase（URLは指定どおり差し替え済み。anonキーを入れてください） ===== */
 const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xIY";
 const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-/* ================================= */
+/* ===================================================================== */
 
 const $=id=>document.getElementById(id);
 
@@ -202,7 +202,7 @@ let currentUser=null, periods=nextTwoPeriods(), calYear,calMonth, myMonthMap=new
 async function loadStaff(selName=null){
   const {data,error}=await supa.from('staff').select('*').eq('include',true).order('name');
   const sel=$('nameSel'); sel.innerHTML='';
-  if(error){return;}
+  if(error){console.error(error); return;}
   (data||[]).forEach(r=>sel.add(new Option(r.name,r.name)));
   const sv=localStorage.getItem('shiftName');
   if(selName){sel.value=selName;}
@@ -300,7 +300,7 @@ function rebuildCalendar(){
     div.addEventListener('click', ()=>{
       $('date').value=ymd;
       rebuildCalendar();
-      drawDraftChip(); // 入力中の視覚化
+      drawDraftChip();
     });
 
     grid.appendChild(div);
@@ -313,7 +313,6 @@ function drawDraftChip(){
   const d=Number(s.slice(-2)); const idxOffset=new Date(calYear,calMonth-1,1).getDay();
   const cell=$('calGrid').children[7 + (idxOffset + d -1)];
   if(!cell) return;
-  // 既存 draft を削除
   Array.from(cell.querySelectorAll('.chip.draft')).forEach(n=>n.remove());
 
   const lAny=$('Lany').checked, dAny=$('Dany').checked;
@@ -385,11 +384,19 @@ $('submitBtn').onclick=async()=>{
   if(error){ $('msg').textContent='Error: '+error.message; return; }
   $('msg').innerHTML='<span class="ok">送信しました ✔︎</span>';
 
-  // 反映
-  const d=Number(rows[0].date.slice(-2)); const arr=myMonthMap.get(d)||[];
-  rows.forEach(r=>arr.push({start_time:r.start_time,end_time:r.end_time,note:r.note}));
-  myMonthMap.set(d,arr);
-  rebuildCalendar(); loadList();
+  /* ===== 条件付きの楽観更新（ここが今回のポイント） ===== */
+  const sub = new Date(rows[0].date);
+  const subY = sub.getFullYear();
+  const subM = sub.getMonth() + 1;
+  if (subY === calYear && subM === calMonth) {
+    const d = Number(rows[0].date.slice(-2));
+    const arr = myMonthMap.get(d) || [];
+    rows.forEach(r => arr.push({ start_time:r.start_time, end_time:r.end_time, note:r.note }));
+    myMonthMap.set(d, arr);
+    rebuildCalendar();
+  }
+  await refreshMyMonth();   // サーバーと整合
+  loadList();
 };
 
 /* ========= 最新10件 ========= */
