@@ -1,46 +1,225 @@
-<!DOCTYPE html>
-<html lang="ja">
+<!DOCTYPE html><html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>KU-DETA シフト提出</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KU-DETA シフト提出（Supabase版）</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+:root{--c-main:#111827;--c-accent:#f59e0b;--c-gray:#6b7280;--c-border:#e5e7eb;--r:10px}
+*{box-sizing:border-box;margin:0}
+body{font-family:'Segoe UI',Roboto,'Helvetica Neue',sans-serif;background:#fafafa;color:var(--c-main);max-width:820px;padding:24px;margin:auto}
+h2{font-size:1.6rem;font-weight:700;margin-bottom:22px}
+label{display:block;margin-top:18px;font-weight:600;font-size:.95rem}
+select,input,textarea{width:100%;max-width:360px;padding:10px;margin-top:6px;border:1px solid var(--c-border);
+border-radius:var(--r);font-size:.95rem}textarea{resize:vertical}
+fieldset{border:1px solid var(--c-border);border-radius:var(--r);padding:14px;margin-top:22px;background:#fff;
+         box-shadow:0 2px 4px rgba(0,0,0,.05)}
+legend{padding:0 8px;font-weight:700;color:var(--c-gray)}
+table{width:100%;border-collapse:collapse;margin-top:8px}
+td{border:1px solid var(--c-border);padding:4px 6px;font-size:.8rem;text-align:center;min-width:60px;background:#fdfdfd}
+td:nth-child(5n){background:#f9fafb}
+button{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;margin-top:22px;border:none;border-radius:var(--r);
+       background:var(--c-main);color:#fff;font-weight:600;font-size:.9rem;cursor:pointer;transition:.15s}
+button:hover{opacity:.9}button:disabled{opacity:.45;cursor:not-allowed}
+#lockBtn{margin-left:8px;padding:9px 18px;font-size:.85rem}
+.notice{margin-top:14px;padding:10px;background:#fefbe8;border-left:4px solid var(--c-accent);border-radius:var(--r);font-size:.88rem}
+.info{margin-top:6px;font-size:.85rem;color:var(--c-gray)}
+.dis{background:#f3f4f6!important;color:var(--c-gray)!important}
+#msg{margin-top:16px;font-weight:600}
+.offAll{display:flex;align-items:center;gap:8px;font-weight:500;margin-top:24px}
+.offAll input{transform:scale(1.2)}
+.nav a{display:inline-block;text-decoration:none;font-weight:600;border-radius:10px;padding:10px 20px;margin-top:22px}
+.nav a.list{background:#111827;color:#fff;border:none}
+.nav a.admin{background:#fff;color:#111827;border:1px solid #e5e7eb;margin-left:12px}
+.small{font-size:.8rem;color:#6b7280;margin-top:10px}
+</style>
 </head>
 <body>
-  <h1>シフト提出フォーム</h1>
-  <form id="shiftForm">
-    <label>名前: <input type="text" id="staff_name" required></label><br>
-    <label>日付: <input type="date" id="date" required></label><br>
-    <label>開始時間: <input type="time" id="start_time" required></label><br>
-    <label>終了時間: <input type="time" id="end_time" required></label><br>
-    <label>備考: <input type="text" id="note"></label><br>
-    <button type="submit">送信</button>
-  </form>
+<h2>KU-DETA シフト提出</h2>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script>
-    const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co"; // 自分のURL
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI"; // 自分のキー
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+<label>表示/回答期間（次の半月から 3 件 + 直近半月）<select id="period"></select></label>
+<p id="deadline" class="info"></p>
+<p id="noticeBox" class="notice"></p>
 
-    document.getElementById('shiftForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const staff_name = document.getElementById('staff_name').value;
-      const date = document.getElementById('date').value;
-      const start_time = document.getElementById('start_time').value;
-      const end_time = document.getElementById('end_time').value;
-      const note = document.getElementById('note').value;
+<label>あなたの名前
+  <input id="nameInp" placeholder="名前を入力">
+  <button id="lockBtn">✔︎ ロック</button>
+</label>
+<p class="info">※ 出勤時間に<strong>希望がある日だけ</strong>、下のプルダウンで時刻を選択してください（連続2h以上）</p>
 
-      const { error } = await supabase
-        .from('shifts')
-        .insert([{ staff_name, date, start_time, end_time, note }]);
+<fieldset><legend>ランチ 10:00-15:00</legend><table id="tblL"></table></fieldset>
+<fieldset><legend>ディナー 17:30-23:00</legend><table id="tblD"></table></fieldset>
 
-      if (error) {
-        alert('エラー: ' + error.message);
-      } else {
-        alert('送信しました！');
-        document.getElementById('shiftForm').reset();
-      }
-    });
-  </script>
-</body>
-</html>
+<label class="offAll"><input type="checkbox" id="offAll"> 今回は出勤希望日がありません</label>
+
+<label>備考<textarea id="memo" rows="3" placeholder="連絡事項があれば入力（全休チェック時はここに『【全休希望】』が自動付与）"></textarea></label>
+<button id="sendBtn">📨 送信</button><p id="msg"></p>
+
+<div class="nav">
+  <a class="list"  href="./shiftlist.html">提出一覧を見る</a>
+  <a class="admin" href="./admin.html">管理ページへ</a>
+</div>
+<div class="small">現在URL：<span id="curUrl"></span></div>
+
+<script>
+/** === 必要情報：自分の Supabase 情報に置換してください === */
+const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI";
+
+/** === 以降そのままでOK === */
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $=id=>document.getElementById(id);
+$('curUrl').textContent = location.href;
+
+const periodSel=$('period'),notice=$('noticeBox'),
+      nameInp=$('nameInp'),lockBtn=$('lockBtn'),
+      memo=$('memo'),msg=$('msg'),tblL=$('tblL'),tblD=$('tblD'),offChk=$('offAll');
+
+function deadlineText(y,m,h){
+  const d = (h==='前半') ? new Date(y,m-2,15) : new Date(y,m-1,0);
+  const d3 = new Date(d.getTime()); d3.setDate(d3.getDate()+3);
+  const fmt = (dt)=>`${dt.getFullYear()}年${dt.getMonth()+1}月${dt.getDate()}日`;
+  return `提出期限：${fmt(d)}（表示は+3日：${fmt(d3)} まで）`;
+}
+
+/* 期間プルダウン（直近半期を+3日まで含め、以後3件） */
+(function buildPeriods(){
+  const t = new Date(); t.setHours(0,0,0,0);
+  const lbl = {'前半':'1-15日','後半':'16-月末'};
+  let y=t.getFullYear(), m=t.getMonth()+1, h=t.getDate()<=15?'前半':'後半';
+  const rawDeadline=(Y,M,H)=>(H==='前半')?new Date(Y,M-2,15):new Date(Y,M-1,0);
+  const showUntil=(Y,M,H)=>{const d=rawDeadline(Y,M,H); d.setDate(d.getDate()+3); return d;};
+  // 直近半期（過ぎていなければ入れる）
+  let py=y, pm=m, ph=(h==='前半'?'後半':'前半'); if(h==='前半'){ pm--; if(pm===0){pm=12;py--;}}
+  const list=[];
+  if(showUntil(py,pm,ph) >= t) list.push([py,pm,ph]);
+  // 次の半期から3件
+  let cy=y, cm=m, ch=(h==='前半'?'後半':'前半'); if(h==='後半'){ cm++; if(cm===13){cm=1;cy++;}}
+  for(let i=0;i<3;){
+    if(showUntil(cy,cm,ch) >= t){ list.push([cy,cm,ch]); i++; }
+    if(ch==='前半'){ ch='後半'; } else { ch='前半'; cm++; if(cm===13){cm=1;cy++;} }
+  }
+  list.forEach(([Y,M,H])=>periodSel.add(new Option(`${Y}年${M}月 ${lbl[H]}`, `${Y}-${M}-${H}`)));
+  const [Y,M,H] = periodSel.value.split('-').map((v,i)=> i<2?+v:v);
+  $('deadline').textContent = deadlineText(+Y,+M,H);
+  loadNotice(+Y,+M,H);
+})();
+periodSel.onchange = ()=> {
+  const [y,m,h] = periodSel.value.split('-'); $('deadline').textContent = deadlineText(+y,+m,h);
+  loadNotice(+y,+m,h);
+};
+
+async function loadNotice(y,m,h){
+  const { data: p } = await client.from('periods').select().eq('year',y).eq('month',m).eq('half',h).maybeSingle();
+  if(!p){ notice.textContent='（お知らせ無し）'; return; }
+  const { data: n } = await client.from('notices').select('message').eq('period_id',p.id).maybeSingle();
+  notice.textContent = (n && n.message) ? n.message : '（お知らせ無し）';
+}
+
+/* 時刻選択肢（2h以上だけ） */
+function genOptions(hStart,mStart,hEnd,mEnd,minMin=120){
+  const pad=n=>('0'+n).slice(-2),toMin=(h,m)=>h*60+m,list=['','◯'];
+  const times=[];for(let h=hStart,m=mStart;;){times.push(`${pad(h)}:${pad(m)}`);if(h===hEnd&&m===mEnd)break;m+=30;if(m===60){m=0;h++;}}
+  times.forEach(t=>{const [h,m]=t.split(':').map(Number);if(toMin(hEnd,mEnd)-toMin(h,m)>=minMin)list.push(`${t}〜`);});
+  times.forEach(t=>{const [h,m]=t.split(':').map(Number);if(toMin(h,m)-toMin(hStart,mStart)>=minMin)list.push(`〜${t}`);});
+  times.forEach((s,i)=>{const [sh,sm]=s.split(':').map(Number);times.slice(i+1).forEach(e=>{const [eh,em]=e.split(':').map(Number);if(toMin(eh,em)-toMin(sh,sm)>=minMin)list.push(`${s}〜${e}`);});});
+  return list;
+}
+const TL=genOptions(10,0,15,0), TD=genOptions(17,30,23,0);
+
+/* テーブルUI */
+function build(tbl,prefix,start,len,list){
+  let html='<tr>';
+  for(let i=0;i<len;i++){
+    if(i%5===0&&i)html+='</tr><tr>';
+    const d=start+i;
+    html+=`<td>${d}<br><select id="${prefix}${d}">`;
+    list.forEach(t=>html+=`<option value="${t}">${t}</option>`); html+='</select></td>';
+  }
+  tbl.innerHTML=html+'</tr>';
+}
+function rebuildTables(){
+  const [ , , h ] = periodSel.value.split('-');
+  const start = (h==='前半')?1:16, len=(h==='前半')?15:16;
+  build(tblL,'L',start,len,TL);
+  build(tblD,'D',start,len,TD);
+}
+rebuildTables();
+periodSel.addEventListener('change', rebuildTables);
+
+/* 名前ロック（ローカル保存） */
+lockBtn.onclick = ()=>{
+  const on = !nameInp.disabled;
+  if(on){ if(!nameInp.value.trim()){alert('名前を入力');return;}
+    nameInp.disabled=true; nameInp.classList.add('dis'); lockBtn.textContent='🔓 変更';
+    localStorage.setItem('shiftName', nameInp.value.trim());
+  }else{
+    nameInp.disabled=false; nameInp.classList.remove('dis'); lockBtn.textContent='✔︎ ロック';
+    localStorage.removeItem('shiftName');
+  }
+};
+(function initName(){
+  const sv = localStorage.getItem('shiftName');
+  if(sv){ nameInp.value=sv; nameInp.disabled=true; nameInp.classList.add('dis'); lockBtn.textContent='🔓 変更'; }
+})();
+
+/* 送信 */
+$('sendBtn').onclick = async ()=>{
+  const name = nameInp.value.trim();
+  if(!name){ alert('名前を入力'); return; }
+  const [y,m,h] = periodSel.value.split('-'); const Y=+y,M=+m,H=h;
+
+  msg.textContent='送信中…';
+
+  // 期間を upsert
+  const { data: period, error: perr } = await client.from('periods')
+    .upsert({ year:Y, month:M, half:H }, { onConflict:'year,month,half' })
+    .select().single();
+  if(perr){ msg.textContent='Error: '+perr.message; return; }
+
+  // スタッフ upsert
+  let { data: st } = await client.from('staff').select().eq('name',name).maybeSingle();
+  if(!st){
+    const add = await client.from('staff').insert({ name }).select().single();
+    if(add.error){ msg.textContent='Error: '+add.error.message; return; }
+    st = add.data;
+  }
+  if(st.include === false){ msg.textContent='登録不可：このスタッフは現在除外設定です'; return; }
+
+  // 入力収集
+  const start = (H==='前半')?1:16, len=(H==='前半')?15:16;
+  const L={}, D={};
+  if(!offChk.checked){
+    for(let i=0;i<len;i++){
+      const d=start+i, vL=$('L'+d).value, vD=$('D'+d).value;
+      if(vL) L[d]=vL; if(vD) D[d]=vD;
+    }
+    if(!Object.keys(L).length && !Object.keys(D).length){
+      alert('1 つ選ぶか「出勤希望なし」にチェック'); msg.textContent=''; return;
+    }
+  }
+  // 既存自分の行をクリーン（この半期分）
+  await client.from('shifts').delete()
+    .eq('staff_id', st.id).eq('period_id', period.id);
+
+  // まとめてINSERT
+  const rows=[];
+  const pushRows=(obj,type)=>Object.entries(obj).forEach(([day,val])=>{
+    rows.push({ staff_id:st.id, period_id:period.id, type, day:+day, value:val });
+  });
+  if(offChk.checked){
+    rows.push({ staff_id:st.id, period_id:period.id, type:'LUNCH', day:start, value:'【全休希望】 '+(memo.value||'') });
+  }else{
+    pushRows(L,'LUNCH'); pushRows(D,'DINNER');
+    if(memo.value) rows.push({ staff_id:st.id, period_id:period.id, type:'LUNCH', day:start, value:'[備考] '+memo.value });
+  }
+  if(rows.length){
+    const { error } = await client.from('shifts').insert(rows);
+    if(error){ msg.textContent='Error: '+error.message; return; }
+  }
+  msg.textContent='登録しました ✔︎';
+  // リセット
+  document.querySelectorAll('select[id^=L],select[id^=D]').forEach(s=>s.value='');
+  memo.value=''; offChk.checked=false;
+};
+</script>
+</body></html>
