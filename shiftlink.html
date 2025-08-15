@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>提出済みシフト一覧</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -20,6 +20,7 @@
   th{background:#f8fafc;position:sticky;top:0;z-index:1}
   .note{color:var(--muted)}
   .tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .err{color:#b91c1c;font-weight:700}
 </style>
 </head>
 <body>
@@ -29,7 +30,7 @@
 <div class="card" id="gate">
   <p class="note">閲覧にはパスワードが必要です。</p>
   <form id="pwForm">
-    <input type="password" id="pw" placeholder="パスワード" required />
+    <input type="password" id="pw" placeholder="パスワード" required>
     <button type="submit">表示する</button>
   </form>
   <p id="pwMsg" class="note"></p>
@@ -46,54 +47,86 @@
     <button id="dlCsv" class="ghost">CSVダウンロード</button>
     <button id="toForm" class="ghost" style="margin-left:auto">← 提出画面へ</button>
   </div>
-  <div class="note" id="hint" style="margin-top:6px"></div>
+  <div id="hint" class="note" style="margin-top:6px"></div>
+  <div id="fatal" class="err"></div>
   <table id="tbl"></table>
 </div>
 
 <script>
-/* ====== Supabase 接続（anon key は“必ず1行”で） ====== */
+/* ====== 設定：必ず同一プロジェクトの組にすること ====== */
 const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI"; // ←あなたの anon key を1行で
-const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SUPABASE_ANON_KEY = "＜ここに anon public を1行で＞"; // ★必ず1行・余計な改行なし
 
-/* ====== パスワードゲート（入力欄に "kdt" は表示しない） ====== */
+/* ====== 状態 ====== */
+let supa = null;  // パス通過後に初期化
 const gate = document.getElementById('gate');
 const app  = document.getElementById('app');
+const hint = document.getElementById('hint');
+const fatal = document.getElementById('fatal');
+
+/* ====== パスワードゲート ====== */
 document.getElementById('pwForm').onsubmit = (e)=>{
   e.preventDefault();
-  const ok = document.getElementById('pw').value === 'kdt';
+  const ok = (document.getElementById('pw').value || '').trim() === 'kdt';
   if(!ok){ document.getElementById('pwMsg').textContent = 'パスワードが違います。'; return; }
+
+  // ゲート解除
   gate.style.display='none'; app.style.display='';
+  sessionStorage.setItem('shiftlink_authed','1'); // 次回自動スキップ
+
+  // Supabase をここで初期化（ここで失敗してもゲートは切り替わっている）
+  try{
+    supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }catch(err){
+    fatal.textContent = 'Supabase 初期化エラー：' + err.message + '（URL/KEY を確認してください）';
+    return;
+  }
+  initApp();  // 表示開始
 };
 
-/* ====== 年月セレクト ====== */
-const ySel=document.getElementById('yy'), mSel=document.getElementById('mm');
-(function initYM(){
-  const t=new Date();
-  for(let y=t.getFullYear()-1; y<=t.getFullYear()+1; y++){
-    ySel.add(new Option(`${y}年`, y));
+/* ====== 既に認証済みならスキップ ====== */
+if(sessionStorage.getItem('shiftlink_authed') === '1'){
+  gate.style.display='none'; app.style.display='';
+  try{
+    supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    initApp();
+  }catch(err){
+    fatal.textContent = 'Supabase 初期化エラー：' + err.message;
   }
+}
+
+/* ====== 本体初期化 ====== */
+function pad2(n){return String(n).padStart(2,'0');}
+
+function initApp(){
+  // 年月セレクト
+  const ySel=document.getElementById('yy'), mSel=document.getElementById('mm');
+  const t=new Date();
+  for(let y=t.getFullYear()-1; y<=t.getFullYear()+1; y++){ ySel.add(new Option(`${y}年`, y)); }
   for(let m=1;m<=12;m++){ mSel.add(new Option(`${m}月`, m)); }
   ySel.value=t.getFullYear(); mSel.value=t.getMonth()+1;
-})();
 
-document.getElementById('toForm').onclick = ()=>{
-  location.href = new URL('index.html', location.href).href;
-};
-document.getElementById('reload').onclick = load;
-document.getElementById('dlCsv').onclick = downloadCsv;
+  document.getElementById('toForm').onclick = ()=>{
+    location.href = new URL('index.html', location.href).href;
+  };
+  document.getElementById('reload').onclick = load;
+  document.getElementById('dlCsv').onclick = downloadCsv;
 
-const hint = document.getElementById('hint');
-function pad2(n){return String(n).padStart(2,'0');}
+  load(); // 初回
+}
 
 /* ====== データ読込 & 表描画 ====== */
 async function load(){
-  const y=+ySel.value, m=+mSel.value;
+  if(!supa){ return; }
+  const y=+document.getElementById('yy').value;
+  const m=+document.getElementById('mm').value;
   const start = `${y}-${pad2(m)}-01`;
   const end   = new Date(start); end.setMonth(end.getMonth()+1);
   const endStr = end.toISOString().slice(0,10);
 
   hint.textContent = '読込中…';
+  fatal.textContent = '';
+
   const { data, error } = await supa
     .from('shifts')
     .select('date,staff_name,start_time,end_time,note')
@@ -107,15 +140,15 @@ async function load(){
     return;
   }
 
-  // 並び順（staff_order テーブルがあれば優先）
+  // 並び順（staff_order があればそれ優先）
   let staffOrder = [];
-  const { data:orderRows } = await supa.from('staff_order').select('name, sort').order('sort',{ascending:true});
-  if(orderRows && orderRows.length){ staffOrder = orderRows.map(r=>r.name); }
+  const { data:orderRows, error:orderErr } = await supa.from('staff_order').select('name, sort').order('sort',{ascending:true});
+  if(!orderErr && orderRows && orderRows.length){ staffOrder = orderRows.map(r=>r.name); }
   else{
     staffOrder = Array.from(new Set((data||[]).map(r=>r.staff_name))).sort((a,b)=>a.localeCompare(b,'ja'));
   }
 
-  const daysInMonth = new Date(y, m, 0).getDate(); // mは1-12でOK
+  const daysInMonth = new Date(y, m, 0).getDate();
   const makeRow = () => Array(daysInMonth).fill('');
   const byName = new Map();
   staffOrder.forEach(n=>byName.set(n, makeRow()));
@@ -128,7 +161,7 @@ async function load(){
     byName.set(r.staff_name, cur);
   });
 
-  // 集計（前半/後半の件数）
+  // 集計（前半/後半）
   const totals = {};
   for(const [name, arr] of byName){
     const firstHalf = arr.slice(0,15).filter(Boolean).length;
@@ -166,14 +199,11 @@ function downloadCsv(){
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const y=+ySel.value, m=+mSel.value;
+  const y=+document.getElementById('yy').value, m=+document.getElementById('mm').value;
   a.href = url; a.download = `shifts_${y}-${pad2(m)}.csv`;
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 }
-
-/* 初期ロード */
-load();
 </script>
 </body>
 </html>
