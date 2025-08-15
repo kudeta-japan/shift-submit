@@ -43,6 +43,7 @@
   .daybox .sec{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0;padding:8px;border-radius:10px}
   .sec.l{background:var(--lunch)} .sec.d{background:var(--dinner)}
   .totals span{display:inline-block;margin-right:10px}
+  .disabledSel{opacity:.6;pointer-events:none}
 </style>
 </head>
 <body>
@@ -145,7 +146,7 @@ async function bootstrapNames(){
 
 /* ============ calendar state ============ */
 let calYear, calMonth;  // 1-based month
-const selections = new Map(); // dateStr -> per-day settings {l:{use,start,end,free}, d:{...}, memo:''}
+const selections = new Map(); // dateStr -> {l:{start,end,free}, d:{...}, memo:''}
 
 function setToToday(){
   const t=new Date(); t.setHours(0,0,0,0);
@@ -159,7 +160,8 @@ $('clearBtn').onclick=()=>{ selections.clear(); renderEditors(); renderCalendar(
 
 /* ============ time helpers ============ */
 function timeOptions(min, max){
-  const arr=[]; for(let m=min;m<=max;m+=30){
+  const arr=['']; // 先頭は「未選択」
+  for(let m=min;m<=max;m+=30){
     const hh=String(Math.floor(m/60)).padStart(2,'0'); const mm=String(m%60).padStart(2,'0');
     arr.push(`${hh}:${mm}`);
   } return arr;
@@ -170,11 +172,14 @@ const DIN_STARTS=timeOptions(1020,1440), DIN_ENDS=timeOptions(1020,1440);    // 
 /* ============ editors (per-day panels) ============ */
 function defaultDay(){
   return {
-    l:{use:false,start:"10:00",end:"16:00",free:false},
-    d:{use:false,start:"17:00",end:"24:00",free:false},
+    l:{start:"",end:"",free:false},
+    d:{start:"",end:"",free:false},
     memo:""
   };
 }
+function includeLunch(c){ return c.l.free || (c.l.start && c.l.end); }
+function includeDinner(c){ return c.d.free || (c.d.start && c.d.end); }
+
 function renderEditors(){
   $('selCount').textContent = selections.size;
   const wrap=$('editWrap'); wrap.innerHTML='';
@@ -184,9 +189,8 @@ function renderEditors(){
   let cntL=0,cntD=0,cntLfree=0,cntDfree=0;
   dates.forEach(ds=>{
     const cfg=selections.get(ds) || defaultDay();
-    // totals
-    if(cfg.l.use){ cntL++; if(cfg.l.free) cntLfree++; }
-    if(cfg.d.use){ cntD++; if(cfg.d.free) cntDfree++; }
+    if(includeLunch(cfg)){ cntL++; if(cfg.l.free) cntLfree++; }
+    if(includeDinner(cfg)){ cntD++; if(cfg.d.free) cntDfree++; }
 
     const box=document.createElement('div'); box.className='daybox';
     box.innerHTML = `
@@ -195,7 +199,7 @@ function renderEditors(){
         <button class="ghost" data-remove="${ds}">× この日を外す</button>
       </div>
       <div class="sec l">
-        <label><input type="checkbox" data-k="${ds}-l-use" ${cfg.l.use?'checked':''}> ランチ（10:00–16:00）を提出する</label>
+        <span class="small"><strong>ランチ</strong>（10:00–16:00）</span>
         <span class="right small note">開始</span>
         <select data-k="${ds}-l-start"></select>
         <span class="small note">終了</span>
@@ -203,7 +207,7 @@ function renderEditors(){
         <label class="small" style="margin-left:8px"><input type="checkbox" data-k="${ds}-l-free" ${cfg.l.free?'checked':''}> 時間指定なし（◯）</label>
       </div>
       <div class="sec d">
-        <label><input type="checkbox" data-k="${ds}-d-use" ${cfg.d.use?'checked':''}> ディナー（17:00–24:00）を提出する</label>
+        <span class="small"><strong>ディナー</strong>（17:00–24:00）</span>
         <span class="right small note">開始</span>
         <select data-k="${ds}-d-start"></select>
         <span class="small note">終了</span>
@@ -214,29 +218,46 @@ function renderEditors(){
     `;
     wrap.appendChild(box);
 
-    // wire selects
-    const setOpts=(sel,arr,val)=>{ sel.innerHTML=''; arr.forEach(t=>sel.add(new Option(t,t))); sel.value=val; };
-    setOpts(wrap.querySelector(`[data-k="${ds}-l-start"]`), LUNCH_STARTS, cfg.l.start);
-    setOpts(wrap.querySelector(`[data-k="${ds}-l-end"]`),   LUNCH_ENDS,   cfg.l.end);
-    setOpts(wrap.querySelector(`[data-k="${ds}-d-start"]`), DIN_STARTS,   cfg.d.start);
-    setOpts(wrap.querySelector(`[data-k="${ds}-d-end"]`),   DIN_ENDS,     cfg.d.end);
+    // set options（先頭は “—” 表示）
+    const setOpts=(sel,arr,val)=>{
+      sel.innerHTML='';
+      arr.forEach(t=> sel.add(new Option(t===''?'—':t, t)) );
+      sel.value = val;
+    };
+    const lS = wrap.querySelector(`[data-k="${ds}-l-start"]`);
+    const lE = wrap.querySelector(`[data-k="${ds}-l-end"]`);
+    const dS = wrap.querySelector(`[data-k="${ds}-d-start"]`);
+    const dE = wrap.querySelector(`[data-k="${ds}-d-end"]`);
+    setOpts(lS, LUNCH_STARTS, cfg.l.start);
+    setOpts(lE, LUNCH_ENDS,   cfg.l.end);
+    setOpts(dS, DIN_STARTS,   cfg.d.start);
+    setOpts(dE, DIN_ENDS,     cfg.d.end);
     wrap.querySelector(`[data-k="${ds}-memo"]`).value = cfg.memo;
+
+    // “◯”で開始/終了を無効化
+    function applyFree(){
+      if(cfg.l.free){ lS.classList.add('disabledSel'); lE.classList.add('disabledSel'); }
+      else           { lS.classList.remove('disabledSel'); lE.classList.remove('disabledSel'); }
+      if(cfg.d.free){ dS.classList.add('disabledSel'); dE.classList.add('disabledSel'); }
+      else           { dS.classList.remove('disabledSel'); dE.classList.remove('disabledSel'); }
+    }
+    applyFree();
 
     // listeners
     box.addEventListener('change', ev=>{
       const k=ev.target.getAttribute('data-k'); if(!k) return;
       const [d, part, key]=k.split('-'); const c=selections.get(d);
-      if(key==='use'||key==='free'){ c[part][key]=ev.target.checked; }
+      if(key==='free'){ c[part].free = ev.target.checked; applyFree(); }
       else if(key==='memo'){ c.memo = ev.target.value; }
-      else{ c[part][key]=ev.target.value; }
+      else{ c[part][key] = ev.target.value; }
       selections.set(d,c); renderCalendar(lastMarkers); renderEditors(); // refresh totals
     });
     box.querySelector(`[data-remove="${ds}"]`).onclick=()=>{ selections.delete(ds); renderEditors(); renderCalendar(lastMarkers); };
   });
 
   totals.innerHTML = `
-    <span>選択ランチ：${cntL}（◯=${cntLfree}）</span>
-    <span>選択ディナー：${cntD}（◯=${cntDfree}）</span>
+    <span>ランチ：${cntL}（◯=${cntLfree}）</span>
+    <span>ディナー：${cntD}（◯=${cntDfree}）</span>
   `;
 }
 function formatDateJ(ds){
@@ -291,7 +312,7 @@ async function loadMonthMarkers(){
     .eq('staff_name', nm).gte('date', start).lt('date', endStr);
   (data||[]).forEach(r=>{
     const v = (!r.start_time || !r.end_time) ? '◯' : `${r.start_time}〜${r.end_time}`;
-    const isLunch = r.start_time ? (r.start_time < "16:00") : true; // null=◯ はパート不明→ランチ側に寄せる
+    const isLunch = r.start_time ? (r.start_time < "16:00") : true; // ◯はとりあえずランチ側に表示
     const key = isLunch ? 'l' : 'd';
     lastMarkers[r.date] ||= {};
     lastMarkers[r.date][key] = v;
@@ -307,37 +328,35 @@ $('sendAllBtn').onclick = async ()=>{
   const dates=[...selections.keys()];
   if(dates.length===0){ alert('日付を選択してください'); return; }
 
-  // build rows
+  // 送信対象行を作成（区分の自動判定）
   const rows=[];
   dates.forEach(ds=>{
     const c=selections.get(ds);
-    if(c.l.use){
+    if(includeLunch(c)){
       rows.push({ date:ds, staff_name:nm,
                   start_time: c.l.free? null : c.l.start,
                   end_time:   c.l.free? null : c.l.end,
                   note: c.memo || '' });
     }
-    if(c.d.use){
+    if(includeDinner(c)){
       rows.push({ date:ds, staff_name:nm,
                   start_time: c.d.free? null : c.d.start,
                   end_time:   c.d.free? null : c.d.end,
                   note: c.memo || '' });
     }
   });
-  if(rows.length===0){ alert('ランチ/ディナーのチェックがありません'); return; }
+  if(rows.length===0){ alert('ランチまたはディナーの時間（または◯）を入力してください'); return; }
 
   try{
-    // delete existing for these dates
+    // 同日データを上書き（削除→追加）
     const { error:delErr } = await supa.from('shifts').delete()
       .eq('staff_name', nm).in('date', dates);
     if(delErr) throw delErr;
 
-    // insert new
     const { error:insErr } = await supa.from('shifts').insert(rows);
     if(insErr) throw insErr;
 
     msg.textContent='送信しました ✔︎'; msg.classList.add('ok');
-    // refresh
     await loadMonthMarkers();
   }catch(e){
     msg.textContent='エラー：'+e.message; msg.classList.add('err');
