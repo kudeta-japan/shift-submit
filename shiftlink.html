@@ -1,159 +1,134 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>提出済みシフト一覧（集計表）</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>提出済みシフト一覧</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  :root{
-    --fg:#111827; --muted:#6b7280; --bd:#e5e7eb; --bg:#fafafa; --card:#ffffff;
-    --accent:#2563eb; --lunch:#fff9db; --dinner:#ffe7d6;
-  }
+  :root{--fg:#111827;--bd:#e5e7eb;--muted:#6b7280;--card:#fff;--bg:#fafafa}
   *{box-sizing:border-box}
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;
-       max-width:1200px;margin:24px auto;padding:0 14px;background:var(--bg);color:var(--fg)}
-  h1{font-size:1.6rem;margin:0 0 .75rem}
-  .note{color:var(--muted);font-size:.92rem}
-  input,select,button,textarea{border:1px solid var(--bd);border-radius:10px;padding:9px 10px;font-size:15px;background:#fff}
-  button{background:var(--fg);color:#fff;font-weight:700;border:none;cursor:pointer}
-  button.ghost{background:#fff;color:var(--fg)}
-  button.link{background:#fff;color:var(--accent);border:1px solid var(--bd)}
-  button:hover{opacity:.94}
+       max-width:1100px;margin:24px auto;padding:0 14px;background:#fafafa;color:var(--fg)}
+  h1{font-size:1.4rem;margin:0 0 .75rem}
   .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin:12px 0}
-  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  .table-wrap{overflow:auto}
-  table{border-collapse:collapse;width:100%}
-  th,td{border:1px solid var(--bd);padding:6px;text-align:center;font-size:13px}
-  th{background:#f7f7f7}
-  th.sticky-left,td.sticky-left{position:sticky;left:0;background:#fff;z-index:2}
-  th.sticky-left-2,td.sticky-left-2{position:sticky;left:120px;background:#fff;z-index:2}
-  td.cell-lunch{background:var(--lunch)}
-  td.cell-dinner{background:var(--dinner)}
-  #gate{max-width:520px;margin:40px auto}
-  #err{color:#b91c1c;margin-left:6px}
+  input,select,button{border:1px solid var(--bd);border-radius:10px;padding:9px 10px;font-size:15px;background:#fff}
+  button{background:#111827;color:#fff;border:none;font-weight:700;cursor:pointer}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  th,td{border:1px solid var(--bd);padding:6px 8px;font-size:14px;text-align:center}
+  th{background:#f8fafc}
+  .note{color:var(--muted)}
 </style>
 </head>
 <body>
-  <h1>提出済みシフト一覧（集計表）</h1>
+<h1>提出済みシフト一覧</h1>
 
-  <!-- パスワードゲート（ヒント表示なし） -->
-  <div id="gate" class="card" style="display:none">
-    <div class="row"><span class="note">閲覧パスワードを入力してください。</span></div>
-    <div class="row">
-      <input id="pw" type="password" placeholder="パスワード" style="max-width:220px">
-      <button id="pwBtn">開く</button>
-      <label class="note" style="display:flex;align-items:center;gap:6px"><input id="remember" type="checkbox" checked>8時間記憶</label>
-      <span id="err" class="note"></span>
-    </div>
+<div class="card" id="gate">
+  <p class="note">閲覧にはパスワードが必要です。</p>
+  <form id="pwForm">
+    <input type="password" id="pw" placeholder="パスワード" required>
+    <button type="submit">表示する</button>
+  </form>
+  <p id="pwMsg" class="note"></p>
+</div>
+
+<div id="app" class="card" style="display:none">
+  <div>
+    <label>表示する年月：
+      <select id="yy"></select>
+      <select id="mm"></select>
+    </label>
+    <button id="reload">再読込</button>
+    <button id="toForm" style="float:right;background:#fff;color:#111827">← 提出画面へ</button>
   </div>
 
-  <!-- 本体 -->
-  <div id="app" style="display:none">
-    <div class="card row">
-      <button class="ghost" onclick="location.href='index.html'">← 提出ページへ</button>
-      <div class="row" style="margin-left:auto">
-        <label>表示月 <input type="month" id="month"></label>
-        <label>フィルタ（名前）<input id="filterName" placeholder="空=全員"></label>
-        <button id="reloadBtn">表示/更新</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3 style="margin:0 0 8px">ランチ（10:00–16:00）</h3>
-      <div class="table-wrap"><table id="tblL"></table></div>
-    </div>
-
-    <div class="card">
-      <h3 style="margin:0 0 8px">ディナー（17:00–24:00）</h3>
-      <div class="table-wrap"><table id="tblD"></table></div>
-    </div>
-  </div>
+  <table id="tbl"></table>
+</div>
 
 <script>
-/* ===== Supabase ===== */
 const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI"; // ←差し替え
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI
+"; // ←差し替え
 const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/* ===== Gate（kdt だが画面表示はしない） ===== */
-const PASS="kdt", REMKEY="shiftlink_gate_ok";
-const $=id=>document.getElementById(id);
-const fmt2 = n => String(n).padStart(2,'0');
-
-function showGate(on){ $('gate').style.display = on?'':'none'; $('app').style.display = on?'none':''; }
-function remembered(){
-  const raw = localStorage.getItem(REMKEY);
-  if(!raw) return false;
-  try{ const {ok,until}=JSON.parse(raw); if(!ok||!until) return false; if(Date.now()>until){localStorage.removeItem(REMKEY);return false;} return true; }
-  catch{ return false; }
-}
-$('pwBtn').onclick=()=>{
-  $('err').textContent='';
-  if($('pw').value.trim()!==PASS){ $('err').textContent='パスワードが違います'; return; }
-  if($('remember').checked){ localStorage.setItem(REMKEY, JSON.stringify({ok:true, until: Date.now()+8*60*60*1000})); }
-  showGate(false); loadAll();
+/* パスワードゲート（入力欄に"kdt"は表示しない） */
+const gate = document.getElementById('gate');
+const app  = document.getElementById('app');
+document.getElementById('pwForm').onsubmit = (e)=>{
+  e.preventDefault();
+  const ok = document.getElementById('pw').value === 'kdt';
+  if(!ok){ document.getElementById('pwMsg').textContent = 'パスワードが違います。'; return; }
+  gate.style.display='none'; app.style.display='';
 };
 
-(function(){
-  const t=new Date(); $('month').value=`${t.getFullYear()}-${fmt2(t.getMonth()+1)}`;
-  if(remembered()){ showGate(false); loadAll(); } else { showGate(true); }
+/* 年月セレクト */
+const ySel=document.getElementById('yy'), mSel=document.getElementById('mm');
+(function initYM(){
+  const t=new Date();
+  for(let y=t.getFullYear()-1; y<=t.getFullYear()+1; y++){
+    ySel.add(new Option(`${y}年`, y));
+  }
+  for(let m=1;m<=12;m++){ mSel.add(new Option(`${m}月`, m)); }
+  ySel.value=t.getFullYear(); mSel.value=t.getMonth()+1;
 })();
 
-/* ===== 一覧構築 ===== */
-$('reloadBtn').onclick = loadAll;
+document.getElementById('toForm').onclick = ()=>{
+  location.href = new URL('index.html', location.href).href;
+};
+document.getElementById('reload').onclick = load;
 
-async function loadAll(){
-  const ym = $('month').value;
-  if(!ym){ alert('年月を選択してください'); return; }
-  const start = ym+'-01';
-  const end = new Date(start); end.setMonth(end.getMonth()+1);
+async function load(){
+  const y=+ySel.value, m=+mSel.value;
+  const start = `${y}-${String(m).padStart(2,'0')}-01`;
+  const end   = new Date(start); end.setMonth(end.getMonth()+1);
   const endStr = end.toISOString().slice(0,10);
-  const nameFilter = $('filterName').value.trim();
 
-  let q = supa.from('shifts').select('date,staff_name,start_time,end_time')
-               .gte('date', start).lt('date', endStr);
-  if(nameFilter) q = q.eq('staff_name', nameFilter);
-  const { data, error } = await q;
-  if(error){ alert('読み込みエラー：'+error.message); return; }
+  const { data, error } = await supa
+    .from('shifts')
+    .select('date,staff_name,start_time,end_time,note')
+    .gte('date', start).lt('date', endStr)
+    .order('staff_name', {ascending:true})
+    .order('date', {ascending:true});
+  if(error){ document.getElementById('tbl').innerHTML = `<tr><td>エラー：${error.message}</td></tr>`; return; }
 
-  const staff = Array.from(new Set(data.map(r=>r.staff_name))).sort((a,b)=>a.localeCompare(b,'ja'));
-  const daysInMonth = new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate();
-  const L = {}, D = {};
-  staff.forEach(n=>{ L[n]=Array(daysInMonth).fill(''); D[n]=Array(daysInMonth).fill(''); });
-
-  data.forEach(r=>{
-    const d = +r.date.slice(-2);
-    const v = (!r.start_time || !r.end_time) ? '◯' : `${r.start_time}〜${r.end_time}`;
-    const isLunch = r.start_time && r.start_time < "16:00";
-    (isLunch?L:D)[r.staff_name][d-1] = v;
-  });
-
-  const header = (days)=> {
-    let h=`<tr><th class="sticky-left" style="min-width:120px">スタッフ</th><th class="sticky-left-2" style="min-width:60px">合計</th>`;
-    for(let i=1;i<=days;i++) h+=`<th>${i}</th>`;
-    return h+`</tr>`;
-  };
-
-  function build(tblId, mat, cls){
-    const tbl=$(tblId);
-    if(staff.length===0){ tbl.innerHTML='<tbody><tr><td class="note">データ無し</td></tr></tbody>'; return; }
-    let body='';
-    staff.forEach(n=>{
-      const row=mat[n]||[];
-      const sum=row.filter(Boolean).length;
-      let tr=`<tr><td class="sticky-left">${escapeHtml(n)}</td><td class="sticky-left-2">${sum}</td>`;
-      for(let i=0;i<daysInMonth;i++) tr+=`<td class="${cls}">${escapeHtml(row[i]||'')}</td>`;
-      body+=tr+`</tr>`;
-    });
-    tbl.innerHTML=`<thead>${header(daysInMonth)}</thead><tbody>${body}</tbody>`;
+  // 名簿（並び順は staff_order テーブルがあれば優先、無ければアルファベット）
+  let staffOrder = [];
+  const { data:orderRows } = await supa.from('staff_order').select('name, sort').order('sort',{ascending:true});
+  if(orderRows && orderRows.length){ staffOrder = orderRows.map(r=>r.name); }
+  else{
+    staffOrder = Array.from(new Set(data.map(r=>r.staff_name))).sort((a,b)=>a.localeCompare(b,'ja'));
   }
 
-  build('tblL', L, 'cell-lunch');
-  build('tblD', D, 'cell-dinner');
-}
+  // 集計用（前半=1..15、後半=16..末）
+  const days = new Date(y, m, 0).getDate();
+  const halfLen = 15;
+  const makeRow = () => Array(days).fill('');
 
-function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, t=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[t])); }
+  const byName = new Map();
+  staffOrder.forEach(n=>byName.set(n, makeRow()));
+  data.forEach(r=>{
+    const idx = (+r.date.slice(-2)) - 1;
+    const v = (!r.start_time || !r.end_time) ? '◯' : `${r.start_time}〜${r.end_time}`;
+    const cur = byName.get(r.staff_name) || makeRow();
+    cur[idx] = cur[idx] ? (cur[idx] + ' / ' + v) : v;   // ランチ・ディナー両方入った場合に併記
+    byName.set(r.staff_name, cur);
+  });
+
+  // 描画
+  let html = '<tr><th style="width:160px">スタッフ</th>';
+  for(let d=1; d<=days; d++){
+    html += `<th>${d}</th>`;
+  }
+  html += '</tr>';
+
+  for(const [name, arr] of byName){
+    html += `<tr><th style="text-align:left">${name}</th>`;
+    arr.forEach(v=> html += `<td>${v||''}</td>`);
+    html += '</tr>';
+  }
+  document.getElementById('tbl').innerHTML = html;
+}
+load();
 </script>
 </body>
 </html>
