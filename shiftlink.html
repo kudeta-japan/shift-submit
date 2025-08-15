@@ -3,232 +3,223 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>提出済みシフト一覧（ランチ/ディナー 切替）</title>
+<title>提出済みシフト一覧</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  :root{--fg:#111827;--bd:#e5e7eb;--muted:#6b7280;--card:#fff;--bg:#fafafa;--tab:#f3f4f6}
+  :root{--fg:#111827;--bd:#e5e7eb;--muted:#6b7280;--bg:#fafafa;--card:#fff;--btn:#111827;--tab:#f3f4f6;--tabact:#111827;--tabactfg:#fff;}
   *{box-sizing:border-box}
-  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;
-       max-width:1100px;margin:24px auto;padding:0 14px;background:var(--bg);color:var(--fg)}
-  h1{font-size:1.4rem;margin:0 0 .75rem}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;max-width:1100px;margin:24px auto;padding:0 14px;background:var(--bg);color:var(--fg)}
+  h1{font-size:1.5rem;margin:0 0 .75rem}
   .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin:12px 0}
   input,select,button{border:1px solid var(--bd);border-radius:10px;padding:9px 10px;font-size:15px;background:#fff}
-  button{background:#111827;color:#fff;border:none;font-weight:700;cursor:pointer}
+  button{background:var(--btn);color:#fff;border:none;font-weight:700;cursor:pointer}
   button.ghost{background:#fff;color:var(--fg)}
-  .tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .tabs{display:flex;gap:8px;margin-top:10px}
-  .tab{padding:8px 12px;border:1px solid var(--bd);border-radius:999px;background:var(--tab);cursor:pointer}
-  .tab.active{background:#111827;color:#fff;border-color:#111827}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .right{margin-left:auto}
+  .note{color:var(--muted)}
   table{width:100%;border-collapse:collapse;margin-top:10px}
   th,td{border:1px solid var(--bd);padding:6px 8px;font-size:14px;text-align:center;vertical-align:middle}
-  th{background:#f8fafc;position:sticky;top:0;z-index:1}
-  .note{color:var(--muted)}
-  .err{color:#b91c1c;font-weight:700}
+  th{background:#f8fafc;position:sticky;top:0}
+  th.stf,td.stf{position:sticky;left:0;background:#fff;z-index:1}
+  .tabs{display:flex;gap:8px}
+  .tab{background:var(--tab);color:#111;border:1px solid var(--bd);padding:6px 12px;border-radius:999px;cursor:pointer;font-weight:700}
+  .tab.active{background:var(--tabact);color:var(--tabactfg)}
 </style>
 </head>
 <body>
 <h1>提出済みシフト一覧</h1>
 
 <!-- パスワードゲート -->
-<div class="card" id="gate">
+<div id="gate" class="card">
   <p class="note">閲覧にはパスワードが必要です。</p>
-  <form id="pwForm">
-    <input type="password" id="pw" placeholder="パスワード" required />
-    <button type="submit">表示する</button>
+  <form id="pwForm" class="row" onsubmit="return false;">
+    <input type="password" id="pw" placeholder="パスワード" autocomplete="current-password" required />
+    <button id="pwBtn" type="submit">表示する</button>
   </form>
   <p id="pwMsg" class="note"></p>
 </div>
 
 <!-- 本体 -->
 <div id="app" class="card" style="display:none">
-  <div class="tools">
-    <label>表示年月：
-      <select id="yy"></select>
-      <select id="mm"></select>
-    </label>
-    <button id="reload">再読込</button>
-    <button id="dlCsv" class="ghost">CSVダウンロード</button>
-    <button id="toForm" class="ghost" style="margin-left:auto">← 提出画面へ</button>
+  <div class="row">
+    <div class="row">
+      <label>表示年月：
+        <select id="yy"></select>
+        <select id="mm"></select>
+      </label>
+      <button id="reload" class="ghost">再読込</button>
+    </div>
+    <div class="tabs right">
+      <button id="tabL" class="tab active">ランチ</button>
+      <button id="tabD" class="tab">ディナー</button>
+    </div>
   </div>
 
-  <div class="tabs">
-    <div class="tab active" data-kind="lunch">ランチ</div>
-    <div class="tab" data-kind="dinner">ディナー</div>
+  <div class="row" style="margin-top:6px">
+    <button id="csvBtn">CSVダウンロード</button>
+    <button id="toForm" class="ghost right">← 提出画面へ</button>
   </div>
 
-  <div id="hint" class="note" style="margin-top:6px"></div>
-  <div id="fatal" class="err"></div>
-  <table id="tbl"></table>
+  <div style="overflow:auto;max-width:100%;border:1px solid var(--bd);border-radius:10px;margin-top:10px">
+    <table id="tbl"></table>
+  </div>
+
+  <p id="stat" class="note" style="margin-top:8px"></p>
 </div>
 
 <script>
-/* ===== 設定：必ず同じプロジェクトの組にすること ===== */
-const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co";
-const SUPABASE_ANON_KEY = "＜ここに anon public を1行で＞"; // ★改行なし・同一プロジェクト
+/* ====== Supabase 接続（差し替え必須） ====== */
+const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co";   // ←あなたのURL
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI";                           // ←あなたのAnon Key
+const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/* ===== 状態 ===== */
-let supa = null;          // 認証後に生成
-let currentKind = 'lunch';// 'lunch' or 'dinner'
+/* ====== パスワードゲート ====== */
 const gate = document.getElementById('gate');
 const app  = document.getElementById('app');
-const hint = document.getElementById('hint');
-const fatal = document.getElementById('fatal');
-const ySel=document.getElementById('yy'), mSel=document.getElementById('mm');
-const tbl=document.getElementById('tbl');
-
-function pad2(n){ return String(n).padStart(2,'0'); }
-
-/* ===== パスワードゲート ===== */
-document.getElementById('pwForm').onsubmit = (e)=>{
-  e.preventDefault();
-  const ok = (document.getElementById('pw').value || '').trim() === 'kdt';
+(function gateInit(){
+  const ok = sessionStorage.getItem('shift_pw_ok') === '1';
+  if(ok){ gate.style.display='none'; app.style.display=''; }
+})();
+document.getElementById('pwForm').addEventListener('submit', ()=>{
+  const ok = document.getElementById('pw').value === 'kdt';
   if(!ok){ document.getElementById('pwMsg').textContent = 'パスワードが違います。'; return; }
+  sessionStorage.setItem('shift_pw_ok','1');
   gate.style.display='none'; app.style.display='';
-  sessionStorage.setItem('shiftlink_authed','1');
-  try{
-    supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  }catch(err){
-    fatal.textContent = 'Supabase 初期化エラー：' + err.message;
-    return;
+});
+
+/* ====== UI要素 ====== */
+const ySel = document.getElementById('yy');
+const mSel = document.getElementById('mm');
+const tbl  = document.getElementById('tbl');
+const stat = document.getElementById('stat');
+const tabL = document.getElementById('tabL');
+const tabD = document.getElementById('tabD');
+let viewKind = 'LUNCH'; // or 'DINNER'
+
+tabL.onclick = ()=>{ viewKind='LUNCH'; tabL.classList.add('active'); tabD.classList.remove('active'); load(); };
+tabD.onclick = ()=>{ viewKind='DINNER'; tabD.classList.add('active'); tabL.classList.remove('active'); load(); };
+
+document.getElementById('reload').onclick = load;
+document.getElementById('toForm').onclick = ()=> { location.href=new URL('index.html', location.href).href; };
+document.getElementById('csvBtn').onclick = downloadCSV;
+
+/* ====== 年月セレクト初期化 ====== */
+(function initYM(){
+  const t = new Date();
+  for(let y=t.getFullYear()-2; y<=t.getFullYear()+1; y++){
+    ySel.add(new Option(`${y}年`, y));
   }
-  initApp();
-};
-
-/* 既に認証済みならスキップ */
-if(sessionStorage.getItem('shiftlink_authed') === '1'){
-  gate.style.display='none'; app.style.display='';
-  try{
-    supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    initApp();
-  }catch(err){
-    fatal.textContent = 'Supabase 初期化エラー：' + err.message;
+  for(let m=1; m<=12; m++){
+    mSel.add(new Option(`${m}月`, m));
   }
-}
+  ySel.value = t.getFullYear();
+  mSel.value = t.getMonth()+1;
+})();
 
-/* ===== 本体初期化 ===== */
-function initApp(){
-  // 年月セレクト
-  const t=new Date();
-  for(let y=t.getFullYear()-1; y<=t.getFullYear()+1; y++){ ySel.add(new Option(`${y}年`, y)); }
-  for(let m=1;m<=12;m++){ mSel.add(new Option(`${m}月`, m)); }
-  ySel.value=t.getFullYear(); mSel.value=t.getMonth()+1;
+/* ====== データロード ====== */
+let lastMatrix = null; // CSV出力用に保持
 
-  // ハンドラ
-  document.getElementById('reload').onclick = loadAndRender;
-  document.getElementById('dlCsv').onclick = downloadCsv;
-  document.getElementById('toForm').onclick = ()=>{ location.href = new URL('index.html', location.href).href; };
+async function load(){
+  tbl.innerHTML = '<tr><td style="padding:16px;text-align:center">読み込み中…</td></tr>';
+  stat.textContent = '';
 
-  // タブ切替
-  document.querySelectorAll('.tab').forEach(el=>{
-    el.onclick = ()=>{
-      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-      el.classList.add('active');
-      currentKind = el.dataset.kind; // lunch / dinner
-      loadAndRender();
-    };
-  });
-
-  // 初回
-  loadAndRender();
-}
-
-/* ===== データ読込 & 表描画 ===== */
-async function loadAndRender(){
-  if(!supa) return;
-  const y=+ySel.value, m=+mSel.value;
-  const start = `${y}-${pad2(m)}-01`;
+  const y = +ySel.value, m = +mSel.value;
+  const start = `${y}-${String(m).padStart(2,'0')}-01`;
   const end   = new Date(start); end.setMonth(end.getMonth()+1);
   const endStr = end.toISOString().slice(0,10);
-
-  hint.textContent='読込中…'; fatal.textContent=''; tbl.innerHTML='';
-
-  // shifts 読込
-  const { data, error } = await supa
-    .from('shifts')
-    .select('date,staff_name,start_time,end_time,note')
-    .gte('date', start).lt('date', endStr)
-    .order('staff_name', {ascending:true})
-    .order('date', {ascending:true});
-
-  if(error){ tbl.innerHTML=`<tr><td>エラー：${error.message}</td></tr>`; hint.textContent=''; return; }
-
-  // 並び順（orderテーブルがあれば優先）
-  let staffOrder = [];
-  const { data:orderRows, error:orderErr } = await supa.from('staff_order').select('name, sort').order('sort',{ascending:true});
-  if(!orderErr && orderRows && orderRows.length){ staffOrder = orderRows.map(r=>r.name); }
-  else{
-    staffOrder = Array.from(new Set((data||[]).map(r=>r.staff_name))).sort((a,b)=>a.localeCompare(b,'ja'));
-  }
-
   const daysInMonth = new Date(y, m, 0).getDate();
-  const makeRow = () => Array(daysInMonth).fill('');
 
-  // ランチ/ディナー各ビュー用にフィルタ
-  const filtered = (data||[]).filter(r=>{
-    // 分類ロジック：
-    //  - 時間未指定（◯）：index 側ではランチ／ディナーそれぞれ別レコードで保存されている想定なので、そのまま該当扱い
-    //  - start_time が 16:00 未満 → ランチ、それ以外 → ディナー
-    if(currentKind === 'lunch'){
-      return (!r.start_time && !r.end_time) || ( (r.start_time||'00:00') < '16:00' );
-    }else{
-      return (!r.start_time && !r.end_time) || ( (r.start_time||'00:00') >= '16:00' );
-    }
-  });
+  // スタッフ一覧（順番）
+  const { data: staffRows, error: staffErr } = await supa
+    .from('staff')
+    .select('name')
+    .eq('include', true)
+    .order('display_order',{ascending:true})
+    .order('name',{ascending:true});
+  if(staffErr){ tbl.innerHTML=`<tr><td style="padding:16px;color:#b91c1c">エラー：${staffErr.message}</td></tr>`; return; }
+  const staff = (staffRows||[]).map(r=>r.name);
 
-  const byName = new Map();
-  staffOrder.forEach(n=>byName.set(n, makeRow()));
-  filtered.forEach(r=>{
-    const idx = (+r.date.slice(-2)) - 1;
-    const v = (!r.start_time || !r.end_time) ? '◯' : `${r.start_time}〜${r.end_time}`;
-    const cur = byName.get(r.staff_name) || makeRow();
-    cur[idx] = cur[idx] ? (cur[idx] + ' / ' + v) : v; // 同日重複は併記
-    byName.set(r.staff_name, cur);
-  });
+  // シフト（当月）
+  const { data: rows, error: shiftErr } = await supa
+    .from('shifts')
+    .select('date,staff_name,start_time,end_time')
+    .gte('date', start).lt('date', endStr)
+    .order('staff_name',{ascending:true})
+    .order('date',{ascending:true});
+  if(shiftErr){ tbl.innerHTML=`<tr><td style="padding:16px;color:#b91c1c">エラー：${shiftErr.message}</td></tr>`; return; }
 
-  // 集計（前半/後半）
-  const totals = {};
-  for(const [name, arr] of byName){
-    const firstHalf = arr.slice(0,15).filter(Boolean).length;
-    const secondHalf= arr.slice(15).filter(Boolean).length;
-    totals[name] = {firstHalf, secondHalf};
+  // kind 判定
+  function kindOf(r){
+    if(!r.start_time || !r.end_time) return 'ANY'; // ◯
+    return (r.start_time < '16:00') ? 'LUNCH' : 'DINNER';
   }
+
+  // マトリクス name -> [days]
+  const matrix = new Map();
+  staff.forEach(n => matrix.set(n, Array(daysInMonth).fill('')));
+
+  rows.forEach(r=>{
+    const k = kindOf(r);
+    if(k !== viewKind && !(k==='ANY')) return; // ◯ は両方に出す
+    const idx = Number(r.date.slice(-2)) - 1;
+    const val = (!r.start_time || !r.end_time) ? '◯'
+              : `${r.start_time.slice(0,5)}〜${r.end_time.slice(0,5)}`;
+    const arr = matrix.get(r.staff_name) || Array(daysInMonth).fill('');
+    arr[idx] = arr[idx] ? `${arr[idx]} / ${val}` : val;
+    matrix.set(r.staff_name, arr);
+  });
 
   // 描画
-  let html = `<tr><th style="width:180px">スタッフ（${currentKind==='lunch'?'ランチ':'ディナー'}）</th>`;
+  let html = '<tr><th class="stf" style="min-width:160px">スタッフ</th>';
   for(let d=1; d<=daysInMonth; d++){ html += `<th>${d}</th>`; }
-  html += '<th>1–15</th><th>16–末</th></tr>';
-
-  for(const [name, arr] of byName){
-    html += `<tr><th style="text-align:left">${name}</th>`;
-    arr.forEach(v=> html += `<td>${v||''}</td>`);
-    html += `<td>${totals[name].firstHalf}</td><td>${totals[name].secondHalf}</td></tr>`;
+  html += '</tr>';
+  for(const n of staff){
+    html += `<tr><th class="stf" style="text-align:left;background:#fff">${n}</th>`;
+    const arr = matrix.get(n) || Array(daysInMonth).fill('');
+    for(let i=0;i<daysInMonth;i++){ html += `<td>${arr[i]||''}</td>`; }
+    html += '</tr>';
   }
+  if(!staff.length){ html = '<tr><td style="padding:16px">表示対象のスタッフがいません（staff.include を確認）</td></tr>'; }
   tbl.innerHTML = html;
 
-  hint.textContent = `表示対象：${y}年${m}月 ／ 種別：${currentKind==='lunch'?'ランチ':'ディナー'} ／ スタッフ ${staffOrder.length}名`;
+  // 統計
+  const filled = rows.length;
+  stat.textContent = `${y}年${m}月 ｜ 表示：${viewKind==='LUNCH'?'ランチ':'ディナー'} ｜ レコード数：${filled}`;
+  lastMatrix = { year:y, month:m, kind:viewKind, staff, days:daysInMonth, matrix };
 }
 
-/* ===== CSV ダウンロード（現在のタブの表そのまま） ===== */
-function tableToCsv(table){
-  const rows = Array.from(table.querySelectorAll('tr'));
-  return rows.map(tr =>
-    Array.from(tr.querySelectorAll('th,td'))
-      .map(td => `"${(td.textContent||'').replace(/"/g,'""')}"`)
-      .join(',')
-  ).join('\r\n');
-}
-function downloadCsv(){
-  if(!tbl || !tbl.rows.length) return;
-  const csv = tableToCsv(tbl);
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
+/* ====== CSVダウンロード（UTF-8 with BOM） ====== */
+function downloadCSV(){
+  if(!lastMatrix){ return; }
+  const { year, month, kind, staff, days, matrix } = lastMatrix;
+  const head = ['スタッフ', ...Array.from({length:days}, (_,i)=>`${i+1}`)];
+  const rows = [head];
+  for(const n of staff){
+    const arr = matrix.get(n) || Array(days).fill('');
+    rows.push([n, ...arr.map(v=>v||'')]);
+  }
+  const csv = '\uFEFF' + rows.map(r => r.map(v => {
+    const s = String(v);
+    return (s.includes(',') || s.includes('"') || s.includes('\n'))
+      ? `"${s.replace(/"/g,'""')}"`
+      : s;
+  }).join(',')).join('\n');
+
+  const blob = new Blob([csv], {type:'text/csv'});
   const a = document.createElement('a');
-  const y=+ySel.value, m=+mSel.value;
-  a.href = url;
-  a.download = `shifts_${currentKind}_${y}-${pad2(m)}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
+  a.href = URL.createObjectURL(blob);
+  a.download = `shifts_${year}${String(month).padStart(2,'0')}_${kind==='LUNCH'?'lunch':'dinner'}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
+
+/* ====== 初期化 ====== */
+(async function init(){
+  // ゲートを通過済みなら即ロード
+  if(sessionStorage.getItem('shift_pw_ok')==='1'){ await load(); }
+  ySel.addEventListener('change', load);
+  mSel.addEventListener('change', load);
+})();
 </script>
 </body>
 </html>
