@@ -3,12 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>KU-DETA シフト提出</title>
+<title>KU-DETA シフト提出（下書き→一括送信 版）</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --fg:#111827; --muted:#6b7280; --bd:#e5e7eb; --bg:#fafafa; --card:#ffffff;
-    --btn:#111827; --ok:#16a34a; --warn:#f59e0b; --lunch:#fff6cf; --dinner:#ffe4d6;
+    --btn:#111827; --ok:#16a34a; --warn:#f59e0b; --err:#b91c1c;
+    --lunch:#fff3bf; --dinner:#ffe0cc; --draft:#fef9c3; --sent:#dcfce7;
   }
   *{box-sizing:border-box}
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;
@@ -19,37 +20,35 @@
   input,select,button,textarea{border:1px solid var(--bd);border-radius:10px;padding:9px 10px;font-size:15px;background:#fff}
   button{background:var(--btn);color:#fff;font-weight:700;border:none;cursor:pointer}
   button.ghost{background:#fff;color:var(--fg)}
-  button:hover{opacity:.94}
+  button.warn{background:var(--warn);color:#111}
+  button:disabled{opacity:.5;cursor:not-allowed}
   .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin:12px 0}
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .dow{font-weight:700;text-align:center;color:#374151}
+  .cell{border:1px solid var(--bd);border-radius:10px;min-height:100px;background:#fff;padding:6px;position:relative;cursor:pointer}
+  .cell:hover{outline:2px solid #e5e7eb}
+  .day{position:absolute;top:6px;left:8px;font-weight:700;font-size:.92rem;color:#4b5563}
+  .mark{position:absolute;bottom:6px;left:6px;right:6px;font-size:.78rem;display:flex;flex-direction:column;gap:4px}
+  .tag{display:inline-block;border-radius:6px;padding:2px 6px;font-size:.78rem;border:1px solid var(--bd)}
+  .tag.l{background:var(--lunch)} .tag.d{background:var(--dinner)}
+  .tag.draft{background:var(--draft)}
+  .tag.sent{background:var(--sent);border-color:#86efac}
+  .today{outline:2px solid var(--warn)}
+  .selected{outline:2px solid var(--btn)}
   .pill{background:#f3f4f6;border:1px solid var(--bd);border-radius:999px;padding:6px 10px}
   .right{margin-left:auto}
   .small{font-size:.88rem}
   .msg{margin-top:6px;font-weight:700}
-  .ok{color:var(--ok)} .err{color:#b91c1c}
-  /* calendar */
-  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
-  .dow{font-weight:700;text-align:center;color:#374151}
-  .cell{border:1px solid var(--bd);border-radius:10px;min-height:90px;background:#fff;padding:6px;position:relative;cursor:pointer}
-  .cell.disabled{opacity:.35;pointer-events:none}
-  .day{position:absolute;top:6px;left:8px;font-weight:700;font-size:.92rem;color:#4b5563}
-  .mark{position:absolute;bottom:6px;left:6px;right:6px;font-size:.78rem;display:flex;flex-direction:column;gap:3px}
-  .tag{display:inline-block;border-radius:6px;padding:2px 6px;font-size:.78rem;border:1px solid var(--bd)}
-  .tag.l{background:var(--lunch)} .tag.d{background:var(--dinner)}
-  .today{outline:2px solid var(--warn)}
-  .selected{outline:3px solid var(--btn)}
-  /* day editors */
-  .daybox{border:1px dashed var(--bd);border-radius:12px;padding:12px;margin:10px 0}
-  .dayhdr{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-  .daybox .sec{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0;padding:8px;border-radius:10px}
-  .sec.l{background:var(--lunch)} .sec.d{background:var(--dinner)}
-  .totals span{display:inline-block;margin-right:10px}
-  .disabledSel{opacity:.6;pointer-events:none}
+  .ok{color:var(--ok)} .err{color:var(--err)}
+  .box{border:1px dashed var(--bd);border-radius:12px;padding:12px}
+  .box.l{background:var(--lunch)} .box.d{background:var(--dinner)}
+  .muted{opacity:.5}
 </style>
 </head>
 <body>
   <h1>KU-DETA シフト提出</h1>
 
-  <!-- 名前 + ロック -->
+  <!-- 上部：名前ロック -->
   <div class="card">
     <div class="row">
       <strong>あなたの名前</strong>
@@ -62,7 +61,7 @@
     </div>
   </div>
 
-  <!-- コントロールバー -->
+  <!-- 入力パネル（この日に下書き保存 → カレンダーに積む）-->
   <div class="card">
     <div class="row" style="justify-content:space-between">
       <div class="row">
@@ -72,304 +71,316 @@
         <button id="nextBtn" class="ghost">次月 »</button>
       </div>
       <div class="row">
-        <span class="small note">選択中：<strong id="selCount">0</strong>日</span>
-        <button id="clearBtn" class="ghost">すべて解除</button>
-        <button id="sendAllBtn">📨 まとめて送信</button>
+        <label class="note">選択中</label>
+        <input id="dateInp" type="date">
+        <button id="saveDraftBtn" class="warn">この日を下書きに追加/更新</button>
+        <button id="removeDraftBtn" class="ghost">この日を下書きから削除</button>
+        <button id="bulkSendBtn">🧾 下書きをまとめて送信</button>
       </div>
     </div>
-    <div class="msg" id="msg"></div>
+
+    <div class="row">
+      <!-- ランチ -->
+      <div class="box l" style="flex:1 1 360px">
+        <div class="row small"><strong>ランチ（10:00–16:00）</strong><span class="note">※チェック不要、時間入力または「◯」で判定</span></div>
+        <div class="row">
+          <label>開始<select id="lStart"></select></label>
+          <label>終了<select id="lEnd"></select></label>
+          <label class="small" style="display:flex;align-items:center;gap:6px">
+            <input type="checkbox" id="lFree"> 時間指定なし（◯）
+          </label>
+        </div>
+      </div>
+      <!-- ディナー -->
+      <div class="box d" style="flex:1 1 360px">
+        <div class="row small"><strong>ディナー（17:00–24:00）</strong><span class="note">※チェック不要、時間入力または「◯」で判定</span></div>
+        <div class="row">
+          <label>開始<select id="dStart"></select></label>
+          <label>終了<select id="dEnd"></select></label>
+          <label class="small" style="display:flex;align-items:center;gap:6px">
+            <input type="checkbox" id="dFree"> 時間指定なし（◯）
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:8px">
+      <label style="flex:1">備考（任意）<textarea id="memo" rows="2" style="width:100%"></textarea></label>
+    </div>
+    <div id="msg" class="msg"></div>
   </div>
 
-  <!-- 選択した日ごとの編集ボックス -->
-  <div id="editWrap" class="card"></div>
-
-  <!-- カレンダー -->
+  <!-- カレンダー：左=下書き, 右=送信済み -->
   <div class="card">
     <div class="row small note" style="margin-bottom:8px">
-      <span class="pill"> legend：<span class="tag l">ランチ</span> <span class="tag d">ディナー</span> ／ ハイライト＝選択日</span>
-      <div class="right totals small" id="totals"></div>
+      <span class="pill"> legend：<span class="tag l">ランチ</span> <span class="tag d">ディナー</span>／
+        <span class="tag draft">下書きあり</span> <span class="tag sent">送信済み</span> ／ ハイライト＝選択日</span>
+      <button id="toListBtn" class="right ghost">提出一覧を見る</button>
     </div>
     <div id="cal" class="grid"></div>
   </div>
 
 <script>
-/* ============ Supabase ============ */
+/* ===== Supabase 接続 ===== */
 const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI";
+const SUPABASE_ANON_KEY = "YOUR-ANON-KEY-PASTE-HERE";  // ← Supabase の anon key を貼ってください
 const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/* ============ DOM refs ============ */
+/* ===== 要素 ===== */
 const $ = id => document.getElementById(id);
 const nameSel=$('nameSel'), nameNew=$('nameNew'), addNameBtn=$('addNameBtn'),
       lockBtn=$('lockBtn'), lockState=$('lockState'),
-      msg=$('msg'), totals=$('totals');
+      lStart=$('lStart'), lEnd=$('lEnd'), lFree=$('lFree'),
+      dStart=$('dStart'), dEnd=$('dEnd'), dFree=$('dFree'),
+      memo=$('memo'), dateInp=$('dateInp'), msg=$('msg');
 
-/* ============ name lock ============ */
+/* ===== 名前ロック ===== */
 function loadLock(){
   const nm = localStorage.getItem('shift_name') || '';
-  if(nm){
-    ensureNameOption(nm,true);
-    nameSel.value = nm; setLock(true);
-  }else setLock(false);
+  if(nm){ ensureOption(nameSel,nm); nameSel.value=nm; setLock(true); }
+  else { setLock(false); }
 }
 function setLock(on){
   nameSel.disabled=on; nameNew.disabled=on; addNameBtn.disabled=on;
   lockBtn.textContent = on ? '🔓 変更' : '✔︎ ロック';
   lockState.textContent = on ? `ロック中：${nameSel.value}` : '未ロック';
 }
-lockBtn.onclick=()=>{
+lockBtn.onclick = ()=>{
   const on=nameSel.disabled;
   if(on){ localStorage.removeItem('shift_name'); setLock(false); }
   else{
     const v=(nameSel.value||'').trim();
-    if(!v){ alert('名前を選ぶか登録してください'); return; }
-    localStorage.setItem('shift_name', v); setLock(true); loadMonthMarkers();
+    if(!v){ alert('名前を選ぶ/登録してください'); return; }
+    localStorage.setItem('shift_name',v); setLock(true);
   }
 };
-addNameBtn.onclick=()=>{
+addNameBtn.onclick = ()=>{
   const nm=nameNew.value.trim();
   if(!nm){ alert('名前を入力'); return; }
-  ensureNameOption(nm,true); nameSel.value=nm; nameNew.value='';
-  localStorage.setItem('shift_name', nm); setLock(true); loadMonthMarkers();
+  ensureOption(nameSel,nm,true); nameSel.value=nm; nameNew.value='';
+  localStorage.setItem('shift_name',nm); setLock(true);
 };
-function ensureNameOption(nm, appendOnly=false){
-  const exists=[...nameSel.options].some(o=>o.value===nm);
-  if(!exists && appendOnly) nameSel.add(new Option(nm,nm));
-}
-async function bootstrapNames(){
-  const { data } = await supa.from('shifts').select('staff_name').limit(1000);
-  const set=new Set((data||[]).map(r=>r.staff_name).filter(Boolean));
-  nameSel.innerHTML='';
-  [...set].sort((a,b)=>a.localeCompare(b,'ja')).forEach(n=>nameSel.add(new Option(n,n)));
-  loadLock();
+function ensureOption(sel, val, appendOnly=false){
+  const ex=Array.from(sel.options).some(o=>o.value===val);
+  if(!ex && appendOnly) sel.add(new Option(val,val));
 }
 
-/* ============ calendar state ============ */
-let calYear, calMonth;  // 1-based month
-const selections = new Map(); // dateStr -> {l:{start,end,free}, d:{...}, memo:''}
+/* ===== 時刻セレクト（30分刻み） ===== */
+function fillTimes(sel, fromMin, toMin){
+  sel.innerHTML='<option value=""></option>';
+  for(let m=fromMin; m<=toMin; m+=30){
+    const hh=String(Math.floor(m/60)).padStart(2,'0');
+    const mm=String(m%60).padStart(2,'0');
+    const v=`${hh}:${mm}`;
+    sel.add(new Option(v,v));
+  }
+}
+fillTimes(lStart, 600, 960); fillTimes(lEnd, 600, 960);         // 10:00–16:00
+fillTimes(dStart, 1020, 1440); fillTimes(dEnd, 1020, 1440);     // 17:00–24:00
 
-function setToToday(){
+/* ===== カレンダー & 下書き ===== */
+let calYear, calMonth;                    // 表示中の年月
+const drafts = new Map();                 // yyyy-mm-dd -> {l:{start,end,free}, d:{...}, memo}
+let submittedMonthCache = [];             // 今月の送信済み（再描画用）
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+function setToday(){
   const t=new Date(); t.setHours(0,0,0,0);
   calYear=t.getFullYear(); calMonth=t.getMonth()+1;
-}
-function pad2(n){ return String(n).padStart(2,'0'); }
-$('prevBtn').onclick=()=>{ changeMonth(-1); };
-$('nextBtn').onclick=()=>{ changeMonth(1); };
-$('thisBtn').onclick=()=>{ setToToday(); renderCalendar(); loadMonthMarkers(); };
-$('clearBtn').onclick=()=>{ selections.clear(); renderEditors(); renderCalendar(lastMarkers); };
-
-/* ============ time helpers ============ */
-function timeOptions(min, max){
-  const arr=['']; // 先頭は「未選択」
-  for(let m=min;m<=max;m+=30){
-    const hh=String(Math.floor(m/60)).padStart(2,'0'); const mm=String(m%60).padStart(2,'0');
-    arr.push(`${hh}:${mm}`);
-  } return arr;
-}
-const LUNCH_STARTS=timeOptions(600,960), LUNCH_ENDS=timeOptions(600,960);    // 10:00-16:00
-const DIN_STARTS=timeOptions(1020,1440), DIN_ENDS=timeOptions(1020,1440);    // 17:00-24:00
-
-/* ============ editors (per-day panels) ============ */
-function defaultDay(){
-  return {
-    l:{start:"",end:"",free:false},
-    d:{start:"",end:"",free:false},
-    memo:""
-  };
-}
-function includeLunch(c){ return c.l.free || (c.l.start && c.l.end); }
-function includeDinner(c){ return c.d.free || (c.d.start && c.d.end); }
-
-function renderEditors(){
-  $('selCount').textContent = selections.size;
-  const wrap=$('editWrap'); wrap.innerHTML='';
-  const dates=[...selections.keys()].sort();
-  if(dates.length===0){ wrap.innerHTML='<div class="note small">日付をカレンダーで選択してください（複数可）。</div>'; totals.textContent=''; return; }
-
-  let cntL=0,cntD=0,cntLfree=0,cntDfree=0;
-  dates.forEach(ds=>{
-    const cfg=selections.get(ds) || defaultDay();
-    if(includeLunch(cfg)){ cntL++; if(cfg.l.free) cntLfree++; }
-    if(includeDinner(cfg)){ cntD++; if(cfg.d.free) cntDfree++; }
-
-    const box=document.createElement('div'); box.className='daybox';
-    box.innerHTML = `
-      <div class="dayhdr">
-        <strong>${formatDateJ(ds)}</strong>
-        <button class="ghost" data-remove="${ds}">× この日を外す</button>
-      </div>
-      <div class="sec l">
-        <span class="small"><strong>ランチ</strong>（10:00–16:00）</span>
-        <span class="right small note">開始</span>
-        <select data-k="${ds}-l-start"></select>
-        <span class="small note">終了</span>
-        <select data-k="${ds}-l-end"></select>
-        <label class="small" style="margin-left:8px"><input type="checkbox" data-k="${ds}-l-free" ${cfg.l.free?'checked':''}> 時間指定なし（◯）</label>
-      </div>
-      <div class="sec d">
-        <span class="small"><strong>ディナー</strong>（17:00–24:00）</span>
-        <span class="right small note">開始</span>
-        <select data-k="${ds}-d-start"></select>
-        <span class="small note">終了</span>
-        <select data-k="${ds}-d-end"></select>
-        <label class="small" style="margin-left:8px"><input type="checkbox" data-k="${ds}-d-free" ${cfg.d.free?'checked':''}> 時間指定なし（◯）</label>
-      </div>
-      <div class="row"><label style="flex:1">備考（任意）<textarea rows="2" style="width:100%" data-k="${ds}-memo"></textarea></label></div>
-    `;
-    wrap.appendChild(box);
-
-    // set options（先頭は “—” 表示）
-    const setOpts=(sel,arr,val)=>{
-      sel.innerHTML='';
-      arr.forEach(t=> sel.add(new Option(t===''?'—':t, t)) );
-      sel.value = val;
-    };
-    const lS = wrap.querySelector(`[data-k="${ds}-l-start"]`);
-    const lE = wrap.querySelector(`[data-k="${ds}-l-end"]`);
-    const dS = wrap.querySelector(`[data-k="${ds}-d-start"]`);
-    const dE = wrap.querySelector(`[data-k="${ds}-d-end"]`);
-    setOpts(lS, LUNCH_STARTS, cfg.l.start);
-    setOpts(lE, LUNCH_ENDS,   cfg.l.end);
-    setOpts(dS, DIN_STARTS,   cfg.d.start);
-    setOpts(dE, DIN_ENDS,     cfg.d.end);
-    wrap.querySelector(`[data-k="${ds}-memo"]`).value = cfg.memo;
-
-    // “◯”で開始/終了を無効化
-    function applyFree(){
-      if(cfg.l.free){ lS.classList.add('disabledSel'); lE.classList.add('disabledSel'); }
-      else           { lS.classList.remove('disabledSel'); lE.classList.remove('disabledSel'); }
-      if(cfg.d.free){ dS.classList.add('disabledSel'); dE.classList.add('disabledSel'); }
-      else           { dS.classList.remove('disabledSel'); dE.classList.remove('disabledSel'); }
-    }
-    applyFree();
-
-    // listeners
-    box.addEventListener('change', ev=>{
-      const k=ev.target.getAttribute('data-k'); if(!k) return;
-      const [d, part, key]=k.split('-'); const c=selections.get(d);
-      if(key==='free'){ c[part].free = ev.target.checked; applyFree(); }
-      else if(key==='memo'){ c.memo = ev.target.value; }
-      else{ c[part][key] = ev.target.value; }
-      selections.set(d,c); renderCalendar(lastMarkers); renderEditors(); // refresh totals
-    });
-    box.querySelector(`[data-remove="${ds}"]`).onclick=()=>{ selections.delete(ds); renderEditors(); renderCalendar(lastMarkers); };
-  });
-
-  totals.innerHTML = `
-    <span>ランチ：${cntL}（◯=${cntLfree}）</span>
-    <span>ディナー：${cntD}（◯=${cntDfree}）</span>
-  `;
-}
-function formatDateJ(ds){
-  const d=new Date(ds+"T00:00:00"); const w="日月火水木金土"[d.getDay()];
-  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${w}）`;
+  dateInp.value = `${calYear}-${pad2(calMonth)}-${pad2(t.getDate())}`;
 }
 
-/* ============ calendar ============ */
-let lastMarkers={}; // date -> {l:'...', d:'...'}
-function changeMonth(delta){
-  calMonth+=delta; if(calMonth===0){calMonth=12;calYear--;} if(calMonth===13){calMonth=1;calYear++;}
-  renderCalendar(lastMarkers); loadMonthMarkers();
+$('prevBtn').onclick=()=>changeMonth(-1);
+$('nextBtn').onclick=()=>changeMonth(1);
+$('thisBtn').onclick=()=>{ setToday(); renderCalendar(); loadMonthSubmitted(); };
+
+function changeMonth(d){
+  calMonth+=d; if(calMonth===0){calMonth=12;calYear--;} if(calMonth===13){calMonth=1;calYear++;}
+  // 選択日が範囲外なら月初へ
+  const cur = new Date(dateInp.value||`${calYear}-${pad2(calMonth)}-01`);
+  if(cur.getFullYear()!==calYear || (cur.getMonth()+1)!==calMonth){
+    dateInp.value=`${calYear}-${pad2(calMonth)}-01`;
+  }
+  renderCalendar(); loadMonthSubmitted();
 }
-function renderCalendar(markers={}){
-  $('ymLabel').textContent = `${calYear}年${calMonth}月`;
+
+function renderCalendar(){
+  $('ymLabel').textContent=`${calYear}年${calMonth}月`;
   const cal=$('cal'); cal.innerHTML='';
-  ['日','月','火','水','木','金','土'].forEach(w=>{ const d=document.createElement('div'); d.textContent=w; d.className='dow'; cal.appendChild(d); });
-  const first = new Date(calYear, calMonth-1, 1);
-  const startDow = first.getDay();
-  const daysInMonth = new Date(calYear, calMonth, 0).getDate();
-  const todayStr = (d=>`${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`)(new Date());
+  ['日','月','火','水','木','金','土'].forEach(w=>{
+    const d=document.createElement('div'); d.textContent=w; d.className='dow'; cal.appendChild(d);
+  });
+  const first=new Date(calYear,calMonth-1,1);
+  const startDow=first.getDay();
+  const daysInMonth=new Date(calYear,calMonth,0).getDate();
+  const todayStr=(d=>`${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`)(new Date());
+  const selStr=dateInp.value;
 
-  for(let i=0;i<startDow;i++){ const e=document.createElement('div'); e.className='cell disabled'; cal.appendChild(e); }
+  for(let i=0;i<startDow;i++){ const e=document.createElement('div'); e.className='cell muted'; cal.appendChild(e); }
+
   for(let d=1; d<=daysInMonth; d++){
-    const ds = `${calYear}-${pad2(calMonth)}-${pad2(d)}`;
+    const ds=`${calYear}-${pad2(calMonth)}-${pad2(d)}`;
     const cell=document.createElement('div'); cell.className='cell';
     if(ds===todayStr) cell.classList.add('today');
-    if(selections.has(ds)) cell.classList.add('selected');
-    cell.onclick=()=>toggleSelect(ds);
+    if(ds===selStr) cell.classList.add('selected');
+    cell.onclick=()=>{ dateInp.value=ds; loadDraftToForm(); renderCalendar(); };
+
     const num=document.createElement('div'); num.className='day'; num.textContent=d; cell.appendChild(num);
-    const m=markers[ds]||{}; const box=document.createElement('div'); box.className='mark';
-    if(m.l) box.innerHTML += `<span class="tag l">${m.l}</span>`;
-    if(m.d) box.innerHTML += `<span class="tag d">${m.d}</span>`;
-    cell.appendChild(box);
+
+    const mark=document.createElement('div'); mark.className='mark';
+
+    // 下書き表示
+    if(drafts.has(ds)){
+      const dr=drafts.get(ds);
+      if(dr.l){ mark.innerHTML += `<span class="tag l">${dr.l.free?'◯':`${dr.l.start||''}〜${dr.l.end||''}`}</span>`; }
+      if(dr.d){ mark.innerHTML += `<span class="tag d">${dr.d.free?'◯':`${dr.d.start||''}〜${dr.d.end||''}`}</span>`; }
+      if(dr.memo){ mark.innerHTML += `<span class="tag draft">メモ</span>`; }
+    }
+
+    // 送信済み表示（今月分キャッシュ）
+    const sentForDay=submittedMonthCache.filter(r=>r.date===ds);
+    if(sentForDay.length){
+      const l = sentForDay.filter(r=>isLunch(r)).map(toLabel).join('<br>');
+      const dnr = sentForDay.filter(r=>!isLunch(r)).map(toLabel).join('<br>');
+      if(l) mark.innerHTML += `<span class="tag l sent">${l}</span>`;
+      if(dnr) mark.innerHTML += `<span class="tag d sent">${dnr}</span>`;
+    }
+
+    cell.appendChild(mark);
     cal.appendChild(cell);
   }
 }
-function toggleSelect(ds){
-  if(selections.has(ds)) selections.delete(ds);
-  else selections.set(ds, defaultDay());
-  renderEditors(); renderCalendar(lastMarkers);
+function isLunch(r){
+  // start_time が 16:00 未満をランチ扱い（◯の場合 start_time/end_time は null）
+  if(!r.start_time && !r.end_time) return true; // ◯は暫定的にランチ扱いに表示
+  return (r.start_time||'00:00') < '16:00';
 }
-async function loadMonthMarkers(){
-  const start = `${calYear}-${pad2(calMonth)}-01`;
-  const end = new Date(start); end.setMonth(end.getMonth()+1);
-  const endStr = end.toISOString().slice(0,10);
+function toLabel(r){
+  return (!r.start_time || !r.end_time) ? '◯' : `${r.start_time}〜${r.end_time}`;
+}
+
+/* ===== 下書き保存/削除 ===== */
+$('saveDraftBtn').onclick = ()=>{
   const nm = nameSel.value || '';
-  lastMarkers = {};
-  if(!nm){ renderCalendar(); return; }
-  const { data } = await supa
-    .from('shifts').select('date,start_time,end_time,staff_name')
-    .eq('staff_name', nm).gte('date', start).lt('date', endStr);
-  (data||[]).forEach(r=>{
-    const v = (!r.start_time || !r.end_time) ? '◯' : `${r.start_time}〜${r.end_time}`;
-    const isLunch = r.start_time ? (r.start_time < "16:00") : true; // ◯はとりあえずランチ側に表示
-    const key = isLunch ? 'l' : 'd';
-    lastMarkers[r.date] ||= {};
-    lastMarkers[r.date][key] = v;
-  });
-  renderCalendar(lastMarkers);
-}
+  if(!nm || !nameSel.disabled){ alert('名前を選択して「✔︎ ロック」してください'); return; }
+  const dt=dateInp.value; if(!dt){ alert('日付を選んでください'); return; }
 
-/* ============ SEND (delete->insert to avoid duplicates) ============ */
-$('sendAllBtn').onclick = async ()=>{
-  msg.textContent=''; msg.className='msg';
-  if(!nameSel.disabled){ alert('「✔︎ ロック」で名前を確定してください'); return; }
-  const nm=nameSel.value || ''; if(!nm){ alert('名前を選んでください'); return; }
-  const dates=[...selections.keys()];
-  if(dates.length===0){ alert('日付を選択してください'); return; }
+  const lunch = lFree.checked || (lStart.value && lEnd.value) ? {
+    start: lFree.checked ? null : lStart.value,
+    end:   lFree.checked ? null : lEnd.value,
+    free:  !!lFree.checked
+  }: null;
 
-  // 送信対象行を作成（区分の自動判定）
-  const rows=[];
-  dates.forEach(ds=>{
-    const c=selections.get(ds);
-    if(includeLunch(c)){
-      rows.push({ date:ds, staff_name:nm,
-                  start_time: c.l.free? null : c.l.start,
-                  end_time:   c.l.free? null : c.l.end,
-                  note: c.memo || '' });
-    }
-    if(includeDinner(c)){
-      rows.push({ date:ds, staff_name:nm,
-                  start_time: c.d.free? null : c.d.start,
-                  end_time:   c.d.free? null : c.d.end,
-                  note: c.memo || '' });
-    }
-  });
-  if(rows.length===0){ alert('ランチまたはディナーの時間（または◯）を入力してください'); return; }
+  const dinner = dFree.checked || (dStart.value && dEnd.value) ? {
+    start: dFree.checked ? null : dStart.value,
+    end:   dFree.checked ? null : dEnd.value,
+    free:  !!dFree.checked
+  }: null;
 
-  try{
-    // 同日データを上書き（削除→追加）
-    const { error:delErr } = await supa.from('shifts').delete()
-      .eq('staff_name', nm).in('date', dates);
-    if(delErr) throw delErr;
+  if(!lunch && !dinner){ alert('ランチ/ディナーいずれかの時間入力または◯を選んでください'); return; }
 
-    const { error:insErr } = await supa.from('shifts').insert(rows);
-    if(insErr) throw insErr;
-
-    msg.textContent='送信しました ✔︎'; msg.classList.add('ok');
-    await loadMonthMarkers();
-  }catch(e){
-    msg.textContent='エラー：'+e.message; msg.classList.add('err');
-  }
+  drafts.set(dt,{ l:lunch, d:dinner, memo:memo.value||'' });
+  msg.textContent=`下書きを保存しました（${dt}）`; msg.className='msg ok';
+  renderCalendar();
+};
+$('removeDraftBtn').onclick = ()=>{
+  const dt=dateInp.value; if(drafts.has(dt)){ drafts.delete(dt); renderCalendar(); }
 };
 
-/* ============ init ============ */
-(async function init(){
-  setToToday();
-  await bootstrapNames();
-  renderEditors();
+function loadDraftToForm(){
+  const dt=dateInp.value;
+  const dr=drafts.get(dt);
+  if(!dr){ // フォーム初期化（値は残しすぎない）
+    lStart.value=""; lEnd.value=""; lFree.checked=false;
+    dStart.value=""; dEnd.value=""; dFree.checked=false;
+    memo.value=''; return;
+  }
+  if(dr.l){ lFree.checked=!!dr.l.free; lStart.value=dr.l.start||""; lEnd.value=dr.l.end||""; }
+  else { lFree.checked=false; lStart.value=""; lEnd.value=""; }
+  if(dr.d){ dFree.checked=!!dr.d.free; dStart.value=dr.d.start||""; dEnd.value=dr.d.end||""; }
+  else { dFree.checked=false; dStart.value=""; dEnd.value=""; }
+  memo.value=dr.memo||'';
+}
+
+/* ===== 一括送信 ===== */
+$('bulkSendBtn').onclick = async ()=>{
+  msg.textContent=''; msg.className='msg';
+  const nm=nameSel.value||''; if(!nm || !nameSel.disabled){ alert('名前を確定してください'); return; }
+  if(drafts.size===0){ alert('下書きがありません'); return; }
+
+  // 下書きからレコード生成
+  const rows=[];
+  for(const [dt,dr] of drafts){
+    if(dr.l){
+      if(!dr.l.free && dr.l.start && dr.l.end && dr.l.start >= dr.l.end){
+        msg.textContent=`エラー：${dt} ランチの時間が不正です`; msg.classList.add('err'); return;
+      }
+      rows.push({
+        date:dt, staff_name:nm,
+        start_time: dr.l.free? null: dr.l.start,
+        end_time:   dr.l.free? null: dr.l.end,
+        note: dr.memo||''
+      });
+    }
+    if(dr.d){
+      if(!dr.d.free && dr.d.start && dr.d.end && dr.d.start >= dr.d.end){
+        msg.textContent=`エラー：${dt} ディナーの時間が不正です`; msg.classList.add('err'); return;
+      }
+      rows.push({
+        date:dt, staff_name:nm,
+        start_time: dr.d.free? null: dr.d.start,
+        end_time:   dr.d.free? null: dr.d.end,
+        note: dr.memo||''
+      });
+    }
+  }
+  if(rows.length===0){ alert('送信対象がありません'); return; }
+
+  // 既存重複（同じdate+name+時間）にぶつかっても更新/無視できるよう upsert
+  const { error } = await supa.from('shifts').upsert(
+    rows,
+    { onConflict: 'date,staff_name,start_time,end_time' }
+  );
+  if(error){ msg.textContent='送信エラー：'+error.message; msg.classList.add('err'); return; }
+
+  msg.textContent=`${rows.length} 件 送信しました ✔︎`; msg.classList.add('ok');
+
+  // 送信成功 → 下書きクリア & 画面更新
+  drafts.clear();
   renderCalendar();
-  loadMonthMarkers();
+  await loadMonthSubmitted();
+  loadDraftToForm(); // フォームを空に
+};
+
+/* ===== 今月の送信済みロード ===== */
+async function loadMonthSubmitted(){
+  const start=`${calYear}-${pad2(calMonth)}-01`;
+  const end=new Date(start); end.setMonth(end.getMonth()+1);
+  const endStr=end.toISOString().slice(0,10);
+  const nm=nameSel.value||'';
+  if(!nm){ submittedMonthCache=[]; renderCalendar(); return; }
+  const { data, error } = await supa
+    .from('shifts')
+    .select('date,start_time,end_time,staff_name')
+    .eq('staff_name', nm).gte('date', start).lt('date', endStr)
+    .order('date');
+  submittedMonthCache = error ? [] : (data||[]);
+  renderCalendar();
+}
+
+/* ===== 提出一覧へ ===== */
+$('toListBtn').onclick=()=>{ location.href=new URL('shiftlink.html', location.href).href; };
+
+/* ===== 初期化 ===== */
+(async function init(){
+  // 既存データから名前候補（distinct）
+  const { data } = await supa.from('shifts').select('staff_name').limit(1000);
+  const set=new Set((data||[]).map(r=>r.staff_name).filter(Boolean));
+  nameSel.innerHTML=''; Array.from(set).sort((a,b)=>a.localeCompare(b,'ja')).forEach(n=>nameSel.add(new Option(n,n)));
+
+  loadLock(); setToday(); renderCalendar(); await loadMonthSubmitted();
+  // 初期フォーム
+  loadDraftToForm();
 })();
 </script>
 </body>
