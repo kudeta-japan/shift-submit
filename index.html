@@ -52,7 +52,7 @@
       <button id="addNameBtn">＋ 登録</button>
       <button id="lockBtn" class="ghost">✔︎ ロック</button>
       <span id="lockState" class="note"></span>
-      <span class="right note small">半月ごとに提出。締切は <strong>15日・月末</strong>（猶予3日は管理者のみ編集可）。時間指定なしは「◯」。</span>
+      <span class="right note small">半月ごと提出・締切は <strong>15日／月末</strong>（猶予3日は管理者のみ編集可）。時間指定なしは「◯」。</span>
     </div>
   </div>
 
@@ -75,9 +75,7 @@
     <div class="row">
       <!-- ランチ -->
       <div class="box l" style="flex:1 1 360px">
-        <div class="row">
-          <label><input type="checkbox" id="lUse"> ランチ（10:00–16:00）を提出する</label>
-        </div>
+        <div class="row"><label><input type="checkbox" id="lUse"> ランチ（10:00–16:00）を提出する</label></div>
         <div class="row">
           <label>開始<select id="lStart"></select></label>
           <label>終了<select id="lEnd"></select></label>
@@ -88,9 +86,7 @@
       </div>
       <!-- ディナー -->
       <div class="box d" style="flex:1 1 360px">
-        <div class="row">
-          <label><input type="checkbox" id="dUse"> ディナー（17:00–24:00）を提出する</label>
-        </div>
+        <div class="row"><label><input type="checkbox" id="dUse"> ディナー（17:00–24:00）を提出する</label></div>
         <div class="row">
           <label>開始<select id="dStart"></select></label>
           <label>終了<select id="dEnd"></select></label>
@@ -128,7 +124,7 @@
 /* ===== Supabase 接続 ===== */
 const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co"; // 固定
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI
-";   // ← あなたの anon key
+";   // ← あなたの anon key に置換
 const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ===== 要素 ===== */
@@ -143,7 +139,7 @@ const nameSel = $('nameSel'), nameNew=$('nameNew'), addNameBtn=$('addNameBtn'),
 function loadLock(){
   const nm = localStorage.getItem('shift_name') || '';
   if(nm){
-    ensureNameInSelect(nm);
+    ensureNameInSelect(nm, true);
     nameSel.value = nm; setLock(true);
   }else{
     setLock(false);
@@ -326,8 +322,6 @@ $('submitBtn').onclick = async () => {
   msg.textContent=`送信しました ✔︎（${targets.length}日 × ${wantsLunch&&wantsDinner?2:1}枠）`;
   msg.classList.add('ok');
 
-  // 入力/選択の軽いリセット
-  // memo.value=''; lFree.checked=false; dFree.checked=false;
   clearSelection();
   loadMonthMarkers();
   loadRecent();
