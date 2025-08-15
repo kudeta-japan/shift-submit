@@ -1,192 +1,116 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>スタッフ管理</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  :root{--fg:#111827;--bd:#e5e7eb;--muted:#6b7280;--card:#fff;--bg:#fafafa;--btn:#111827}
+  :root{--fg:#111827;--muted:#6b7280;--bd:#e5e7eb;--bg:#fafafa;--card:#fff}
   *{box-sizing:border-box}
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;
        max-width:900px;margin:24px auto;padding:0 14px;background:var(--bg);color:var(--fg)}
   h1{font-size:1.4rem;margin:0 0 .75rem}
-  .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin:12px 0}
-  input,button{border:1px solid var(--bd);border-radius:10px;padding:9px 10px;font-size:15px;background:#fff}
-  button{background:var(--btn);color:#fff;border:none;font-weight:700;cursor:pointer}
-  button.ghost{background:#fff;color:var(--fg)}
-  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  table{width:100%;border-collapse:collapse;margin-top:10px}
+  .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin:12px 0}
+  input,button{border:1px solid var(--bd);border-radius:10px;padding:8px 10px;font-size:15px;background:#fff}
+  button{background:#111827;color:#fff;border:none;font-weight:700;cursor:pointer}
+  button.ghost{background:#fff;color:#111827}
+  table{width:100%;border-collapse:collapse}
   th,td{border:1px solid var(--bd);padding:6px 8px;text-align:left}
   th{background:#f8fafc}
-  .note{color:var(--muted);font-size:.9rem}
-  .right{margin-left:auto}
-  .err{color:#b91c1c;font-weight:700}
-  .ok{color:#16a34a;font-weight:700}
+  .note{color:var(--muted);font-size:.92rem}
 </style>
 </head>
 <body>
 <h1>スタッフ管理</h1>
 
-<!-- パスワードゲート -->
-<div id="gate" class="card">
-  <p class="note">管理画面の閲覧・編集にはパスワードが必要です。</p>
-  <form id="pwForm" class="row">
-    <input type="password" id="pw" placeholder="パスワード" required>
-    <button type="submit">入る</button>
-    <span id="pwMsg" class="err"></span>
-    <button type="button" id="toForm" class="right ghost">← 提出画面へ</button>
-  </form>
+<div class="card">
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <input id="newName" placeholder="新規スタッフ名" style="min-width:240px">
+    <button id="addBtn">＋ 追加</button>
+    <button id="backBtn" class="ghost" style="margin-left:auto">← 提出画面へ</button>
+  </div>
+  <p class="note" style="margin-top:6px">※ ドロップダウンには「表示」にチェックが入っている人だけが並び、<br>並び順は <code>display_order</code>（小さいほど上）→ 名前 で決まります。</p>
 </div>
 
-<!-- 本体 -->
-<div id="app" class="card" style="display:none">
-  <div class="row">
-    <strong>スタッフ一覧</strong>
-    <span class="note">（表示順は上から。チェックOFFはフォームに出しません）</span>
-    <button type="button" id="toForm2" class="right ghost">← 提出画面へ</button>
-  </div>
-
-  <div class="row" style="margin-top:8px">
-    <input id="nameInput" placeholder="新規スタッフ名" style="min-width:220px">
-    <input id="sortInput" placeholder="表示順（数値）" type="number" style="width:140px">
-    <button id="addBtn">＋ 追加 / 更新</button>
-    <span id="msg" class="note"></span>
-  </div>
-
+<div class="card">
   <table id="tbl">
     <thead>
-      <tr>
-        <th style="width:80px">順序</th>
-        <th>名前</th>
-        <th style="width:80px;text-align:center">表示</th>
-        <th style="width:180px">操作</th>
-      </tr>
+      <tr><th style="width:80px">順序</th><th>名前</th><th style="width:80px">表示</th><th style="width:160px">操作</th></tr>
     </thead>
-    <tbody id="tbody"><tr><td colspan="4" class="note">読み込み中…</td></tr></tbody>
+    <tbody></tbody>
   </table>
 </div>
 
 <script>
-/* ===== Supabase 接続（差し替え） ===== */
-const SUPABASE_URL = "https://wnttziqspjkrinymnodz.supabase.co";      // ←あなたの URL
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI"; // ←あなたの anon key
-const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SUPABASE_URL  = "https://wnttziqspjkrinymnodz.supabase.co";
+const SUPABASE_KEY  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudHR6aXFzcGprcmlueW1ub2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxNzE0OTMsImV4cCI6MjA3MDc0NzQ5M30.lKbZM4TCtEyhdU9lBnFPMnRWXMpKybqfIWATaD3m0xI";
+const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-/* ===== 画面遷移 ===== */
-const gate = document.getElementById('gate');
-const app  = document.getElementById('app');
-document.getElementById('toForm').onclick = () => location.href = new URL('index.html', location.href).href;
-document.getElementById('toForm2').onclick = () => location.href = new URL('index.html', location.href).href;
+const $ = s => document.querySelector(s);
+$('#backBtn').onclick = ()=> location.href='index.html';
 
-/* ===== パスワード（ゲートだけ） ===== */
-document.getElementById('pwForm').onsubmit = (e)=>{
-  e.preventDefault();
-  const ok = document.getElementById('pw').value === 'kdt';   // ←パスワード
-  if(!ok){ document.getElementById('pwMsg').textContent = 'パスワードが違います。'; return; }
-  gate.style.display='none'; app.style.display='';
-  loadStaff();
-};
-
-/* ===== スタッフ一覧 ===== */
-const tbody = document.getElementById('tbody');
-const msgEl = document.getElementById('msg');
-
-async function loadStaff(){
-  msg('');
-  tbody.innerHTML = '<tr><td colspan="4" class="note">読み込み中…</td></tr>';
-
+async function load(){
   const { data, error } = await supa
     .from('staff')
-    .select('id,name,visible,sort')
-    .order('sort', { ascending:true })
-    .order('name', { ascending:true });
+    .select('id,name,include,display_order')
+    .order('display_order',{ascending:true})
+    .order('name',{ascending:true});
+  if(error){ alert('取得エラー：'+error.message); return; }
 
-  if(error){
-    tbody.innerHTML = `<tr><td colspan="4" class="err">読込エラー：${error.message}</td></tr>`;
-    console.error(error);
-    return;
-  }
-  if(!data.length){
-    tbody.innerHTML = '<tr><td colspan="4" class="note">スタッフが登録されていません。</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = '';
-  data.forEach(row=>{
-    const tr = document.createElement('tr');
-
-    // sort
-    const tdSort = document.createElement('td');
-    const inpSort = document.createElement('input');
-    inpSort.type='number'; inpSort.value = row.sort ?? 0; inpSort.style.width='80px';
-    inpSort.onchange = ()=> updateSort(row.id, Number(inpSort.value||0));
-    tdSort.appendChild(inpSort); tr.appendChild(tdSort);
-
-    // name
-    const tdName = document.createElement('td'); tdName.textContent = row.name; tr.appendChild(tdName);
-
-    // visible
-    const tdVis = document.createElement('td'); tdVis.style.textAlign='center';
-    const chk = document.createElement('input'); chk.type='checkbox'; chk.checked = !!row.visible;
-    chk.onchange = ()=> toggleVisible(row.id, chk.checked);
-    tdVis.appendChild(chk); tr.appendChild(tdVis);
-
-    // actions
-    const tdAct = document.createElement('td');
-    const delBtn = document.createElement('button');
-    delBtn.textContent='削除'; delBtn.style.background='#991b1b';
-    delBtn.onclick = ()=> removeStaff(row.id, row.name);
-    tdAct.appendChild(delBtn);
-    tr.appendChild(tdAct);
-
+  const tbody = $('#tbl tbody'); tbody.innerHTML='';
+  (data||[]).forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="number" min="1" value="${r.display_order}" data-id="${r.id}" class="ord" style="width:72px"></td>
+      <td>${r.name}</td>
+      <td style="text-align:center"><input type="checkbox" class="inc" data-id="${r.id}" ${r.include?'checked':''}></td>
+      <td>
+        <button class="save" data-id="${r.id}">保存</button>
+        <button class="del ghost" data-id="${r.id}" style="margin-left:6px">削除</button>
+      </td>`;
     tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('.save').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = +btn.dataset.id;
+      const ord = +tbody.querySelector(`.ord[data-id="${id}"]`).value || 999;
+      const inc = tbody.querySelector(`.inc[data-id="${id}"]`).checked;
+      const { error } = await supa.from('staff').update({ display_order: ord, include: inc }).eq('id', id);
+      if(error){ alert('保存エラー：'+error.message); return; }
+      await load();
+    };
+  });
+  tbody.querySelectorAll('.del').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = +btn.dataset.id;
+      if(!confirm('削除しますか？（この名前に結びつく提出は参照制約により削除できない場合があります）')) return;
+      const { error } = await supa.from('staff').delete().eq('id', id);
+      if(error){ alert('削除エラー：'+error.message); return; }
+      await load();
+    };
   });
 }
 
-function msg(t, ok=false){
-  msgEl.textContent = t || '';
-  msgEl.className = ok ? 'ok' : (t ? 'err' : 'note');
-}
+$('#addBtn').onclick = async ()=>{
+  const name = ($('#newName').value||'').trim();
+  if(!name){ alert('名前を入力してください'); return; }
+  // 重複回避（UNIQUE name）
+  const { data:exists } = await supa.from('staff').select('id').eq('name', name).limit(1);
+  if(exists && exists.length){ alert('その名前は既にあります'); return; }
 
-/* 追加/更新（同名は上書き：sort/visible を更新） */
-document.getElementById('addBtn').onclick = async ()=>{
-  msg('');
-  const name = document.getElementById('nameInput').value.trim();
-  const sort = Number(document.getElementById('sortInput').value || 0);
-  if(!name){ msg('名前を入力してください'); return; }
+  // 末尾に追加（現在の最大+10 を仮ルール）
+  const { data:maxRow } = await supa.from('staff').select('display_order').order('display_order',{ascending:false}).limit(1);
+  const base = (maxRow && maxRow.length ? maxRow[0].display_order : 0) + 10;
 
-  const { error } = await supa
-    .from('staff')
-    .upsert([{ name, sort, visible: true }], { onConflict: 'name' });
-
-  if(error){ msg('保存エラー：' + error.message); return; }
-  document.getElementById('nameInput').value='';
-  document.getElementById('sortInput').value='';
-  msg('保存しました', true);
-  loadStaff();
+  const { error } = await supa.from('staff').insert({ name, display_order: base, include: true });
+  if(error){ alert('追加エラー：'+error.message); return; }
+  $('#newName').value='';
+  await load();
 };
 
-/* 表示ON/OFF */
-async function toggleVisible(id, visible){
-  const { error } = await supa.from('staff').update({ visible }).eq('id', id);
-  if(error){ msg('更新エラー：' + error.message); loadStaff(); }
-}
-
-/* 並び順更新 */
-async function updateSort(id, sort){
-  const { error } = await supa.from('staff').update({ sort }).eq('id', id);
-  if(error){ msg('更新エラー：' + error.message); loadStaff(); }
-}
-
-/* 削除 */
-async function removeStaff(id, name){
-  if(!confirm(`「${name}」を削除しますか？`)) return;
-  const { error } = await supa.from('staff').delete().eq('id', id);
-  if(error){ msg('削除エラー：' + error.message); return; }
-  msg('削除しました', true);
-  loadStaff();
-}
+load();
 </script>
 </body>
 </html>
